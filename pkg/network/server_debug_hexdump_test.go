@@ -24,10 +24,11 @@ func TestDebugHexdumpRx(t *testing.T) {
 	// Give server time to start
 	time.Sleep(50 * time.Millisecond)
 
-	// Capture logs
+	// Capture logs (restore previous writer when done)
 	var buf bytes.Buffer
+	prev := log.Writer()
 	log.SetOutput(&buf)
-	defer log.SetOutput(nil)
+	defer log.SetOutput(prev)
 
 	// Dial and send a YSFD (data) like packet
 	serverAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:43003")
