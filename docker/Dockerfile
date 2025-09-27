@@ -2,7 +2,7 @@
 FROM golang:1.25-alpine AS builder
 
 # Install dependencies
-RUN apk add --no-cache git make
+RUN apk add --no-cache git make nodejs npm
 
 # Set working directory
 WORKDIR /app
@@ -16,8 +16,8 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
-RUN make build-linux
+# Build frontend first, then the application
+RUN make frontend && make build-linux
 
 # Final stage
 FROM alpine:latest
