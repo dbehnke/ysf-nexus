@@ -1,0 +1,47 @@
+server:
+  host: "0.0.0.0"
+  port: 42000
+  timeout: "5m"
+  max_connections: 200
+  name: "YSF Nexus"
+  description: "Docker Monitor"
+
+web:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  auth_required: true
+  username: "admin"
+  password: "changeme"  # CHANGE THIS PASSWORD!
+
+# MQTT integration for real-time events
+mqtt:
+  enabled: true
+  broker: "tcp://mosquitto:1883"
+  topic_prefix: "ysf/reflector"
+  client_id: "ysf-nexus"
+  qos: 1
+  retained: false
+
+# Prometheus metrics for monitoring
+metrics:
+  enabled: true
+  prometheus:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+
+blocklist:
+  enabled: true
+  callsigns: []
+  # Example blocked callsigns:
+  # - "BLOCKED"
+  # - "SPAM123"
+
+logging:
+  level: "info"
+  format: "json"
+  file: "/app/logs/ysf-nexus.log"
+  max_size: 100
+  max_backups: 3
+  max_age: 28
