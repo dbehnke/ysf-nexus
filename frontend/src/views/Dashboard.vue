@@ -3,13 +3,13 @@
     <!-- Header -->
     <div class="flex justify-between items-center">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p class="text-gray-600">YSF Nexus Reflector Status</p>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+        <p class="text-gray-600 dark:text-gray-400">YSF Nexus Reflector Status</p>
       </div>
       <div class="flex items-center space-x-3">
         <div class="flex items-center space-x-2">
           <div :class="connected ? 'status-online' : 'status-offline'"></div>
-          <span class="text-sm text-gray-600">
+          <span class="text-sm text-gray-600 dark:text-gray-400">
             {{ connected ? 'Connected' : 'Disconnected' }}
           </span>
         </div>
@@ -29,7 +29,7 @@
     <!-- Current Talker Card -->
     <div class="card">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold text-gray-900">Current Talker</h2>
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Current Talker</h2>
         <div v-if="currentTalker" class="flex items-center space-x-2">
           <div class="status-talking"></div>
           <span class="text-sm font-medium text-warning-600">On Air</span>
@@ -42,8 +42,8 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
         </div>
-        <h3 class="text-2xl font-bold text-gray-900 mb-2">{{ currentTalker.callsign }}</h3>
-        <p class="text-gray-600 mb-4">{{ currentTalker.address }}</p>
+        <h3 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">{{ currentTalker.callsign }}</h3>
+        <p class="text-gray-600 dark:text-gray-400 mb-4">{{ currentTalker.address }}</p>
         <div class="inline-flex items-center px-3 py-1 bg-warning-100 text-warning-800 rounded-full text-sm font-medium">
           <svg class="w-4 h-4 mr-1 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
             <circle cx="10" cy="10" r="3"/>
@@ -53,13 +53,13 @@
       </div>
 
       <div v-else class="text-center py-12">
-        <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <div class="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
           <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
         </div>
-        <h3 class="text-lg font-medium text-gray-500 mb-2">No Active Transmission</h3>
-        <p class="text-gray-400">Waiting for someone to key up...</p>
+        <h3 class="text-lg font-medium text-gray-500 dark:text-gray-400 mb-2">No Active Transmission</h3>
+        <p class="text-gray-400 dark:text-gray-500">Waiting for someone to key up...</p>
       </div>
     </div>
 

@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -23,6 +24,13 @@ import (
 //go:embed dist
 var staticFiles embed.FS
 
+// maskIPAddress masks the last two octets of an IP address for privacy
+// Example: 192.168.1.100:42000 -> 192.168.**:42000
+func maskIPAddress(address string) string {
+	re := regexp.MustCompile(`^(\d+\.\d+\.)\d+\.\d+(:\d+)?$`)
+	return re.ReplaceAllString(address, "${1}**${2}")
+}
+
 // Server represents the web dashboard server
 type Server struct {
 	config          *config.Config
@@ -32,6 +40,7 @@ type Server struct {
 	eventChan       <-chan repeater.Event
 	talkLogs        []TalkLogEntry
 	websocketHub    *WebSocketHub
+	startTime       time.Time
 	mu              sync.RWMutex
 	running         bool
 }
@@ -81,6 +90,7 @@ func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager
 		eventChan:       eventChan,
 		talkLogs:        make([]TalkLogEntry, 0),
 		websocketHub:    hub,
+		startTime:       time.Now(),
 	}
 }
 
@@ -244,6 +254,11 @@ func (s *Server) processEvents(ctx context.Context) {
 
 // handleEvent processes a repeater event
 func (s *Server) handleEvent(event repeater.Event) {
+	s.logger.Debug("Processing event",
+		logger.String("type", event.Type),
+		logger.String("callsign", event.Callsign),
+		logger.Duration("duration", event.Duration))
+
 	switch event.Type {
 	case repeater.EventTalkEnd:
 		// Add to talk logs
@@ -270,19 +285,20 @@ func (s *Server) handleEvent(event repeater.Event) {
 
 	case repeater.EventTalkStart:
 		s.broadcastWebSocketMessage("talk_start", map[string]interface{}{
-			"callsign": event.Callsign,
+			"callsign":  event.Callsign,
+			"timestamp": event.Timestamp,
 		})
 
 	case repeater.EventConnect:
 		s.broadcastWebSocketMessage("repeater_connect", map[string]interface{}{
 			"callsign": event.Callsign,
-			"address":  event.Address,
+			"address":  maskIPAddress(event.Address),
 		})
 
 	case repeater.EventDisconnect:
 		s.broadcastWebSocketMessage("repeater_disconnect", map[string]interface{}{
 			"callsign": event.Callsign,
-			"address":  event.Address,
+			"address":  maskIPAddress(event.Address),
 		})
 	}
 
@@ -310,15 +326,9 @@ func (hub *WebSocketHub) run() {
 		case message := <-hub.broadcast:
 			hub.mu.RLock()
 			for client := range hub.clients {
-				select {
-				case client := <-hub.unregister:
+				if err := client.WriteMessage(websocket.TextMessage, message); err != nil {
 					delete(hub.clients, client)
 					client.Close()
-				default:
-					if err := client.WriteMessage(websocket.TextMessage, message); err != nil {
-						delete(hub.clients, client)
-						client.Close()
-					}
 				}
 			}
 			hub.mu.RUnlock()
@@ -375,7 +385,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	stats := s.repeaterManager.GetStats()
 
 	response := map[string]interface{}{
-		"uptime":            time.Since(time.Now().Add(-24*time.Hour)).Seconds(), // Placeholder
+		"uptime":            int(time.Since(s.startTime).Seconds()),
 		"activeRepeaters":   stats.ActiveRepeaters,
 		"totalConnections":  stats.TotalConnections,
 		"totalPackets":      stats.TotalPackets,

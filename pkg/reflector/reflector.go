@@ -80,12 +80,8 @@ func (r *Reflector) Start(ctx context.Context) error {
 
 	var wg sync.WaitGroup
 
-	// Start event processor
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		r.processEvents(ctx)
-	}()
+	// NOTE: Event processor removed - web server handles events directly from the repeater manager
+	// The reflector was consuming events from the channel, preventing the web server from receiving them
 
 	// Start repeater cleanup
 	wg.Add(1)
@@ -317,6 +313,10 @@ func (r *Reflector) processEvents(ctx context.Context) {
 				logger.String("callsign", event.Callsign),
 				logger.String("address", event.Address),
 				logger.Duration("duration", event.Duration))
+
+			// Forward event to web server via separate channel
+			// Note: The web server has its own event channel that it shares with the repeater manager
+			// This was the wrong approach - we should not consume events here
 
 			// TODO: Forward to MQTT if configured
 			// TODO: Store in database if configured
