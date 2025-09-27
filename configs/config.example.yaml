@@ -1,0 +1,61 @@
+server:
+  host: "0.0.0.0"
+  port: 42000
+  timeout: "5m"
+  max_connections: 200
+  name: "YSF Nexus"
+  description: "Go YSF Reflector"
+
+web:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  auth_required: false
+  # username: "admin"
+  # password: "changeme"
+
+bridges:
+  - name: "YSF001"
+    host: "ysf001.example.com"
+    port: 42000
+    schedule: "0 */6 * * *"  # Every 6 hours
+    duration: "1h"
+    enabled: false
+
+  - name: "Regional Net"
+    host: "regional.ysf.net"
+    port: 42000
+    schedule: "0 20 * * 6"   # Saturdays at 8 PM
+    duration: "1h30m"        # 1.5 hours
+    enabled: false
+
+mqtt:
+  enabled: false
+  broker: "tcp://localhost:1883"
+  topic_prefix: "ysf/reflector"
+  client_id: "ysf-nexus"
+  username: ""
+  password: ""
+  qos: 1
+  retained: false
+
+blocklist:
+  enabled: true
+  callsigns: []
+  # - "BLOCKED"
+  # - "SPAM123"
+
+logging:
+  level: "info"        # debug, info, warn, error
+  format: "text"       # text, json
+  file: ""             # empty for stdout only
+  max_size: 100        # MB
+  max_backups: 3
+  max_age: 28         # days
+
+metrics:
+  enabled: true
+  prometheus:
+    enabled: true
+    port: 9090
+    path: "/metrics"
