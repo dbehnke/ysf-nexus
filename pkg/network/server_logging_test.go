@@ -24,10 +24,11 @@ func TestInfoRxLogging(t *testing.T) {
 	// Give server time to start
 	time.Sleep(50 * time.Millisecond)
 
-	// Replace standard logger output
+	// Replace standard logger output (restore previous writer when done)
 	var buf bytes.Buffer
+	prev := log.Writer()
 	log.SetOutput(&buf)
-	defer log.SetOutput(nil)
+	defer log.SetOutput(prev)
 
 	// Dial server and send poll
 	serverAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:43001")
@@ -74,10 +75,11 @@ func TestInfoTxLogging(t *testing.T) {
 	}
 	defer conn.Close()
 
-	// Replace standard logger output
+	// Replace standard logger output (restore previous writer when done)
 	var buf bytes.Buffer
+	prev := log.Writer()
 	log.SetOutput(&buf)
-	defer log.SetOutput(nil)
+	defer log.SetOutput(prev)
 
 	// Send a status response using SendPacket
 	remote, _ := net.ResolveUDPAddr("udp", "127.0.0.1:43002")
