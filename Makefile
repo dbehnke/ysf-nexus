@@ -15,12 +15,17 @@ GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
 
 # Build targets
-.PHONY: all build clean test test-coverage test-integration test-load lint docker help
+.PHONY: all build clean test test-coverage test-integration test-load lint docker help frontend
 
-all: clean lint test build ## Build everything
+all: clean lint test frontend build ## Build everything
 
 build: ## Build the binary
 	$(GOBUILD) $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/ysf-nexus
+
+frontend: ## Build the frontend
+	@echo "Building frontend..."
+	cd frontend && npm install && npm run build
+	@echo "Frontend built successfully"
 
 build-linux: ## Build for Linux
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o bin/$(BINARY_NAME)-linux ./cmd/ysf-nexus
@@ -37,6 +42,8 @@ clean: ## Clean build artifacts
 	$(GOCLEAN)
 	rm -rf bin/
 	rm -rf coverage/
+	rm -rf pkg/web/dist/*
+	cd frontend && rm -rf node_modules/ dist/
 
 test: ## Run unit tests
 	$(GOTEST) -v ./...
@@ -89,6 +96,13 @@ dev: ## Run in development mode with hot reload
 		echo "air not found, install with: go install github.com/cosmtrek/air@latest"; \
 		$(GOBUILD) -o bin/$(BINARY_NAME) ./cmd/ysf-nexus && ./bin/$(BINARY_NAME); \
 	fi
+
+dev-frontend: ## Run frontend in development mode
+	cd frontend && npm run dev
+
+dev-full: ## Run both backend and frontend in development mode
+	@echo "Starting backend and frontend in development mode"
+	make dev & make dev-frontend
 
 install-tools: ## Install development tools
 	$(GOGET) github.com/golangci/golangci-lint/cmd/golangci-lint@latest
