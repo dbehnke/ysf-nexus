@@ -4,7 +4,7 @@ server:
   timeout: "5m"
   max_connections: 200
   name: "YSF Nexus"
-  description: "Docker Monitor"
+  description: "Docker Stack"
 
 web:
   enabled: true
