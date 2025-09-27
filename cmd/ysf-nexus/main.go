@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/spf13/cobra"
+
+	"github.com/dbehnke/ysf-nexus/pkg/config"
+	"github.com/dbehnke/ysf-nexus/pkg/logger"
+	"github.com/dbehnke/ysf-nexus/pkg/reflector"
 )
 
 var (
@@ -28,29 +31,64 @@ with web dashboard, MQTT integration, and bridge capabilities.`,
 
 	// Add flags
 	rootCmd.Flags().StringP("config", "c", "config.yaml", "Configuration file path")
-	rootCmd.Flags().StringP("host", "h", "0.0.0.0", "Server host")
-	rootCmd.Flags().IntP("port", "p", 42000, "Server port")
-	rootCmd.Flags().Bool("debug", false, "Enable debug logging")
+	rootCmd.Flags().StringP("host", "h", "", "Server host (overrides config)")
+	rootCmd.Flags().IntP("port", "p", 0, "Server port (overrides config)")
+	rootCmd.Flags().Bool("debug", false, "Enable debug logging (overrides config)")
 
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatal(err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
 func runServer(cmd *cobra.Command, args []string) error {
-	// Get configuration
+	// Get command line flags
 	configFile, _ := cmd.Flags().GetString("config")
-	host, _ := cmd.Flags().GetString("host")
-	port, _ := cmd.Flags().GetInt("port")
-	debug, _ := cmd.Flags().GetBool("debug")
+	hostOverride, _ := cmd.Flags().GetString("host")
+	portOverride, _ := cmd.Flags().GetInt("port")
+	debugOverride, _ := cmd.Flags().GetBool("debug")
 
-	fmt.Printf("YSF Nexus %s starting...\n", Version)
-	fmt.Printf("Config: %s\n", configFile)
-	fmt.Printf("Listening on: %s:%d\n", host, port)
-
-	if debug {
-		fmt.Println("Debug logging enabled")
+	// Load configuration
+	cfg, err := config.Load(configFile)
+	if err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
 	}
+
+	// Apply command line overrides
+	if hostOverride != "" {
+		cfg.Server.Host = hostOverride
+	}
+	if portOverride > 0 {
+		cfg.Server.Port = portOverride
+	}
+	if debugOverride {
+		cfg.Logging.Level = "debug"
+	}
+
+	// Initialize logger
+	loggerConfig := logger.Config{
+		Level:       cfg.Logging.Level,
+		Format:      cfg.Logging.Format,
+		File:        cfg.Logging.File,
+		MaxSize:     cfg.Logging.MaxSize,
+		MaxBackups:  cfg.Logging.MaxBackups,
+		MaxAge:      cfg.Logging.MaxAge,
+		Development: cfg.Logging.Level == "debug",
+	}
+
+	log, err := logger.New(loggerConfig)
+	if err != nil {
+		return fmt.Errorf("failed to initialize logger: %w", err)
+	}
+	defer log.Sync()
+
+	log.Info("YSF Nexus starting",
+		logger.String("version", Version),
+		logger.String("build_time", BuildTime),
+		logger.String("config_file", configFile))
+
+	// Create and start reflector
+	r := reflector.New(cfg, log)
 
 	// Setup context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -61,16 +99,16 @@ func runServer(cmd *cobra.Command, args []string) error {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		<-sigChan
-		fmt.Println("\nShutdown signal received, stopping server...")
+		sig := <-sigChan
+		log.Info("Shutdown signal received", logger.String("signal", sig.String()))
 		cancel()
 	}()
 
-	// TODO: Initialize and start the actual server components
-	fmt.Println("Server starting... (placeholder)")
+	// Start the reflector
+	if err := r.Start(ctx); err != nil {
+		log.Error("Reflector error", logger.Error(err))
+		return err
+	}
 
-	// Wait for shutdown
-	<-ctx.Done()
-	fmt.Println("Server stopped")
 	return nil
 }
