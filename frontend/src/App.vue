@@ -69,7 +69,7 @@
                 Talk Logs
               </router-link>
             </li>
-            <li>
+            <li v-if="authStore.isAuthenticated">
               <router-link
                 to="/settings"
                 class="flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors"
@@ -82,7 +82,46 @@
                 Settings
               </router-link>
             </li>
+            <li v-else-if="authStore.authRequired">
+              <router-link
+                to="/login"
+                class="flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors"
+                :class="$route.path === '/login' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'"
+              >
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                Sign In
+              </router-link>
+            </li>
           </ul>
+
+          <!-- Authentication Status -->
+          <div v-if="authStore.authRequired" class="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+            <div v-if="authStore.isAuthenticated" class="px-3 py-2">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                  <div class="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <span class="text-xs text-gray-600 dark:text-gray-400">Authenticated</span>
+                </div>
+                <button
+                  @click="handleLogout"
+                  class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  title="Sign out"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div v-else class="px-3 py-2">
+              <div class="flex items-center space-x-2">
+                <div class="w-2 h-2 bg-yellow-400 rounded-full"></div>
+                <span class="text-xs text-gray-600 dark:text-gray-400">Sign in required for settings</span>
+              </div>
+            </div>
+          </div>
         </nav>
       </aside>
 
@@ -97,16 +136,34 @@
 </template>
 
 <script>
+import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useTheme } from './composables/useTheme.js'
+import { useAuthStore } from './stores/auth.js'
 
 export default {
   name: 'App',
   setup() {
+    const router = useRouter()
     const { isDark, toggleTheme } = useTheme()
+    const authStore = useAuthStore()
+
+    const handleLogout = async () => {
+      await authStore.logout()
+      // Redirect to dashboard after logout
+      router.push('/')
+    }
+
+    // Check auth status when app loads
+    onMounted(() => {
+      authStore.checkAuthStatus()
+    })
 
     return {
       isDark,
-      toggleTheme
+      toggleTheme,
+      authStore,
+      handleLogout
     }
   }
 }

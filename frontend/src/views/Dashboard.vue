@@ -73,8 +73,8 @@
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Uptime</p>
-            <p class="text-xl font-semibold text-gray-900">{{ formatDuration(stats.uptime) }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Uptime</p>
+            <p class="text-xl font-semibold text-gray-900 dark:text-white">{{ formatDuration(stats.uptime) }}</p>
           </div>
         </div>
       </div>
@@ -87,8 +87,8 @@
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Active Repeaters</p>
-            <p class="text-xl font-semibold text-gray-900">{{ stats.activeRepeaters }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Active Repeaters</p>
+            <p class="text-xl font-semibold text-gray-900 dark:text-white">{{ stats.activeRepeaters }}</p>
           </div>
         </div>
       </div>
@@ -101,8 +101,8 @@
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Total Packets</p>
-            <p class="text-xl font-semibold text-gray-900">{{ stats.totalPackets.toLocaleString() }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Packets</p>
+            <p class="text-xl font-semibold text-gray-900 dark:text-white">{{ stats.totalPackets.toLocaleString() }}</p>
           </div>
         </div>
       </div>
@@ -115,8 +115,8 @@
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Data Transfer</p>
-            <p class="text-xl font-semibold text-gray-900">{{ formatBytes(stats.bytesReceived + stats.bytesSent) }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Data Transfer</p>
+            <p class="text-xl font-semibold text-gray-900 dark:text-white">{{ formatBytes(stats.bytesReceived + stats.bytesSent) }}</p>
           </div>
         </div>
       </div>
@@ -127,29 +127,29 @@
       <!-- Active Repeaters -->
       <div class="card">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-semibold text-gray-900">Active Repeaters</h2>
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Active Repeaters</h2>
           <span class="badge-success">{{ onlineRepeaters.length }} online</span>
         </div>
 
         <div class="space-y-3">
-          <div v-if="onlineRepeaters.length === 0" class="text-center py-8 text-gray-500">
+          <div v-if="onlineRepeaters.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
             No active repeaters
           </div>
           <div
             v-for="repeater in onlineRepeaters.slice(0, 5)"
             :key="repeater.callsign"
-            class="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+            class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
           >
             <div class="flex items-center space-x-3">
               <div :class="repeater.is_talking ? 'status-talking' : 'status-online'"></div>
               <div>
-                <p class="font-medium text-gray-900">{{ repeater.callsign }}</p>
-                <p class="text-sm text-gray-500">{{ repeater.address }}</p>
+                <p class="font-medium text-gray-900 dark:text-white">{{ repeater.callsign }}</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400">{{ repeater.address }}</p>
               </div>
             </div>
             <div class="text-right">
-              <p class="text-sm text-gray-600">{{ formatDuration(Math.floor((Date.now() - new Date(repeater.connected)) / 1000)) }}</p>
-              <p class="text-xs text-gray-400">{{ repeater.packet_count }} packets</p>
+              <p class="text-sm text-gray-600 dark:text-gray-300">{{ formatDuration(Math.floor((Date.now() - new Date(repeater.connected)) / 1000)) }}</p>
+              <p class="text-xs text-gray-400 dark:text-gray-500">{{ repeater.packet_count }} packets</p>
             </div>
           </div>
           <div v-if="onlineRepeaters.length > 5" class="text-center">
@@ -163,26 +163,26 @@
       <!-- Recent Talk Activity -->
       <div class="card">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-semibold text-gray-900">Recent Activity</h2>
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h2>
           <router-link to="/logs" class="text-sm text-primary-600 hover:text-primary-700">
             View all logs →
           </router-link>
         </div>
 
         <div class="space-y-3">
-          <div v-if="talkLogs.length === 0" class="text-center py-8 text-gray-500">
+          <div v-if="talkLogs.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
             No recent activity
           </div>
           <div
             v-for="log in talkLogs.slice(0, 5)"
             :key="log.id"
-            class="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+            class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
           >
             <div class="flex items-center space-x-3">
               <div class="w-2 h-2 bg-success-500 rounded-full"></div>
               <div>
-                <p class="font-medium text-gray-900">{{ log.callsign }}</p>
-                <p class="text-sm text-gray-500">{{ formatTimeAgo(log.timestamp) }}</p>
+                <p class="font-medium text-gray-900 dark:text-white">{{ log.callsign }}</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400">{{ formatTimeAgo(log.timestamp) }}</p>
               </div>
             </div>
             <div class="text-right">
