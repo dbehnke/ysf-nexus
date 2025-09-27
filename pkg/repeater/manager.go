@@ -187,6 +187,9 @@ func (m *Manager) ProcessPacket(callsign string, addr *net.UDPAddr, packetType s
 			repeater.StartTalking()
 			m.sendEvent(EventTalkStart, callsign, addr.String(), 0)
 			log.Printf("Repeater %s started talking", callsign)
+		} else {
+			// Update talk data timestamp for ongoing transmission
+			repeater.UpdateTalkData()
 		}
 	}
 }
@@ -205,15 +208,22 @@ func (m *Manager) ProcessTransmit(addr *net.UDPAddr, dataSize int) {
 
 // StartCleanup starts the cleanup goroutine for timed-out repeaters
 func (m *Manager) StartCleanup(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+	// Cleanup timed-out repeaters every 30 seconds
+	cleanupTicker := time.NewTicker(30 * time.Second)
+	defer cleanupTicker.Stop()
+
+	// Check for talk timeouts every 2 seconds for responsiveness
+	talkTicker := time.NewTicker(2 * time.Second)
+	defer talkTicker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-cleanupTicker.C:
 			m.cleanupTimedOut()
+		case <-talkTicker.C:
+			m.checkTalkTimeouts()
 		}
 	}
 }
@@ -250,6 +260,22 @@ func (m *Manager) cleanupTimedOut() {
 	if len(toRemove) > 0 {
 		log.Printf("Cleaned up %d timed-out repeaters", len(toRemove))
 	}
+}
+
+// checkTalkTimeouts checks for and handles talk session timeouts
+func (m *Manager) checkTalkTimeouts() {
+	// Talk timeout duration (3 seconds without data packets)
+	talkTimeout := 3 * time.Second
+
+	m.repeaters.Range(func(key, value interface{}) bool {
+		repeater := value.(*Repeater)
+		if repeater.IsTalkTimedOut(talkTimeout) {
+			duration := repeater.StopTalking()
+			m.sendEvent(EventTalkEnd, repeater.Callsign(), repeater.Address().String(), duration)
+			log.Printf("Repeater %s stopped talking (timeout after %v)", repeater.Callsign(), duration)
+		}
+		return true
+	})
 }
 
 // GetStats returns current manager statistics

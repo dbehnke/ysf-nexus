@@ -23,6 +23,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
   // WebSocket connection
   const ws = ref(null)
 
+  // Timers
+  const talkUpdateTimer = ref(null)
+  const statsUpdateTimer = ref(null)
+
   // Computed
   const activeTalkers = computed(() => {
     return repeaters.value.filter(r => r.is_talking)
@@ -143,6 +147,15 @@ export const useDashboardStore = defineStore('dashboard', () => {
         }
         break
 
+      case 'repeater_connect':
+        // Add new repeater if not already in the list
+        const existingIndex = repeaters.value.findIndex(r => r.callsign === data.data.callsign)
+        if (existingIndex === -1) {
+          // Need to fetch the full repeater data since connect event only has callsign/address
+          fetchRepeaters()
+        }
+        break
+
       case 'repeater_disconnect':
         const disconnectIndex = repeaters.value.findIndex(r => r.callsign === data.data.callsign)
         if (disconnectIndex !== -1) {
@@ -154,34 +167,31 @@ export const useDashboardStore = defineStore('dashboard', () => {
         const startTalker = repeaters.value.find(r => r.callsign === data.data.callsign)
         if (startTalker) {
           startTalker.is_talking = true
-          startTalker.talk_duration = 0
+          startTalker.talk_start_time = new Date(data.data.timestamp)
           currentTalker.value = startTalker
         }
+        startTalkUpdateTimer()
+        startFastStatsTimer()
         break
 
       case 'talk_end':
         const endTalker = repeaters.value.find(r => r.callsign === data.data.callsign)
         if (endTalker) {
           endTalker.is_talking = false
-          endTalker.talk_duration = 0
         }
 
-        // Add to talk logs
-        talkLogs.value.unshift({
-          id: Date.now(),
-          callsign: data.data.callsign,
-          duration: data.data.duration,
-          timestamp: new Date().toISOString()
-        })
-
-        // Keep only last 100 logs
-        if (talkLogs.value.length > 100) {
-          talkLogs.value = talkLogs.value.slice(0, 100)
-        }
+        // Note: Talk logs are managed by the server and fetched via API
+        // Real-time updates are handled by periodic fetching when needed
 
         // Clear current talker if it was this one
         if (currentTalker.value && currentTalker.value.callsign === data.data.callsign) {
           currentTalker.value = null
+        }
+
+        // Stop timers if no one is talking
+        if (activeTalkers.value.length === 0) {
+          stopTalkUpdateTimer()
+          startSlowStatsTimer()
         }
         break
 
@@ -200,12 +210,61 @@ export const useDashboardStore = defineStore('dashboard', () => {
     connected.value = false
   }
 
+  function startTalkUpdateTimer() {
+    if (talkUpdateTimer.value) {
+      clearInterval(talkUpdateTimer.value)
+    }
+    talkUpdateTimer.value = setInterval(() => {
+      // Update live talk durations
+      repeaters.value.forEach(repeater => {
+        if (repeater.is_talking && repeater.talk_start_time) {
+          const now = new Date()
+          const durationMs = now - repeater.talk_start_time
+          repeater.talk_duration = Math.floor(durationMs / 1000)
+        }
+      })
+    }, 100) // Update every 100ms for smooth display
+  }
+
+  function stopTalkUpdateTimer() {
+    if (talkUpdateTimer.value) {
+      clearInterval(talkUpdateTimer.value)
+      talkUpdateTimer.value = null
+    }
+  }
+
+  function startFastStatsTimer() {
+    if (statsUpdateTimer.value) {
+      clearInterval(statsUpdateTimer.value)
+    }
+    statsUpdateTimer.value = setInterval(() => {
+      fetchStats()
+    }, 2000) // Update every 2 seconds when active
+  }
+
+  function startSlowStatsTimer() {
+    if (statsUpdateTimer.value) {
+      clearInterval(statsUpdateTimer.value)
+    }
+    statsUpdateTimer.value = setInterval(() => {
+      fetchStats()
+    }, 10000) // Update every 10 seconds when idle
+  }
+
+  function stopStatsTimer() {
+    if (statsUpdateTimer.value) {
+      clearInterval(statsUpdateTimer.value)
+      statsUpdateTimer.value = null
+    }
+  }
+
   // Initialize
   function initialize() {
     fetchStats()
     fetchRepeaters()
     fetchTalkLogs()
     connectWebSocket()
+    startSlowStatsTimer() // Start with slow refresh when idle
   }
 
   return {
@@ -230,6 +289,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
     fetchTalkLogs,
     connectWebSocket,
     disconnectWebSocket,
+    startTalkUpdateTimer,
+    stopTalkUpdateTimer,
+    startFastStatsTimer,
+    startSlowStatsTimer,
+    stopStatsTimer,
     initialize
   }
 })

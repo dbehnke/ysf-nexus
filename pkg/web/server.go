@@ -2,13 +2,18 @@ package web
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +28,13 @@ import (
 //go:embed dist
 var staticFiles embed.FS
 
+// maskIPAddress masks the last two octets of an IP address for privacy
+// Example: 192.168.1.100:42000 -> 192.168.**:42000
+func maskIPAddress(address string) string {
+	re := regexp.MustCompile(`^(\d+\.\d+\.)\d+\.\d+(:\d+)?$`)
+	return re.ReplaceAllString(address, "${1}**${2}")
+}
+
 // Server represents the web dashboard server
 type Server struct {
 	config          *config.Config
@@ -32,8 +44,11 @@ type Server struct {
 	eventChan       <-chan repeater.Event
 	talkLogs        []TalkLogEntry
 	websocketHub    *WebSocketHub
+	startTime       time.Time
 	mu              sync.RWMutex
 	running         bool
+	sessions        map[string]time.Time // session token -> expiry time
+	sessionsMu      sync.RWMutex
 }
 
 // TalkLogEntry represents a talk log entry
@@ -81,6 +96,8 @@ func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager
 		eventChan:       eventChan,
 		talkLogs:        make([]TalkLogEntry, 0),
 		websocketHub:    hub,
+		startTime:       time.Now(),
+		sessions:        make(map[string]time.Time),
 	}
 }
 
@@ -104,6 +121,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Start event processor
 	go s.processEvents(ctx)
+
+	// Start session cleanup if auth is enabled
+	if s.config.Web.AuthRequired {
+		go s.startSessionCleanup(ctx)
+	}
 
 	// Setup routes
 	router := s.setupRoutes()
@@ -172,13 +194,20 @@ func (s *Server) setupRoutes() *mux.Router {
 	// System endpoints
 	api.HandleFunc("/system/info", s.handleSystemInfo).Methods("GET")
 
-	// Configuration endpoints (placeholder)
-	api.HandleFunc("/config/server", s.handleGetServerConfig).Methods("GET")
-	api.HandleFunc("/config/server", s.handleUpdateServerConfig).Methods("PUT")
-	api.HandleFunc("/config/blocklist", s.handleGetBlocklistConfig).Methods("GET")
-	api.HandleFunc("/config/blocklist", s.handleUpdateBlocklistConfig).Methods("PUT")
-	api.HandleFunc("/config/logging", s.handleGetLoggingConfig).Methods("GET")
-	api.HandleFunc("/config/logging", s.handleUpdateLoggingConfig).Methods("PUT")
+	// Authentication endpoints
+	api.HandleFunc("/auth/login", s.handleLogin).Methods("POST")
+	api.HandleFunc("/auth/logout", s.handleLogout).Methods("POST")
+	api.HandleFunc("/auth/status", s.handleAuthStatus).Methods("GET")
+
+	// Protected configuration endpoints
+	protectedAPI := api.PathPrefix("/config").Subrouter()
+	protectedAPI.Use(s.authMiddleware)
+	protectedAPI.HandleFunc("/server", s.handleGetServerConfig).Methods("GET")
+	protectedAPI.HandleFunc("/server", s.handleUpdateServerConfig).Methods("PUT")
+	protectedAPI.HandleFunc("/blocklist", s.handleGetBlocklistConfig).Methods("GET")
+	protectedAPI.HandleFunc("/blocklist", s.handleUpdateBlocklistConfig).Methods("PUT")
+	protectedAPI.HandleFunc("/logging", s.handleGetLoggingConfig).Methods("GET")
+	protectedAPI.HandleFunc("/logging", s.handleUpdateLoggingConfig).Methods("PUT")
 
 	// Health check
 	api.HandleFunc("/health", s.handleHealth).Methods("GET")
@@ -244,6 +273,11 @@ func (s *Server) processEvents(ctx context.Context) {
 
 // handleEvent processes a repeater event
 func (s *Server) handleEvent(event repeater.Event) {
+	s.logger.Debug("Processing event",
+		logger.String("type", event.Type),
+		logger.String("callsign", event.Callsign),
+		logger.Duration("duration", event.Duration))
+
 	switch event.Type {
 	case repeater.EventTalkEnd:
 		// Add to talk logs
@@ -270,19 +304,20 @@ func (s *Server) handleEvent(event repeater.Event) {
 
 	case repeater.EventTalkStart:
 		s.broadcastWebSocketMessage("talk_start", map[string]interface{}{
-			"callsign": event.Callsign,
+			"callsign":  event.Callsign,
+			"timestamp": event.Timestamp,
 		})
 
 	case repeater.EventConnect:
 		s.broadcastWebSocketMessage("repeater_connect", map[string]interface{}{
 			"callsign": event.Callsign,
-			"address":  event.Address,
+			"address":  maskIPAddress(event.Address),
 		})
 
 	case repeater.EventDisconnect:
 		s.broadcastWebSocketMessage("repeater_disconnect", map[string]interface{}{
 			"callsign": event.Callsign,
-			"address":  event.Address,
+			"address":  maskIPAddress(event.Address),
 		})
 	}
 
@@ -310,15 +345,9 @@ func (hub *WebSocketHub) run() {
 		case message := <-hub.broadcast:
 			hub.mu.RLock()
 			for client := range hub.clients {
-				select {
-				case client := <-hub.unregister:
+				if err := client.WriteMessage(websocket.TextMessage, message); err != nil {
 					delete(hub.clients, client)
 					client.Close()
-				default:
-					if err := client.WriteMessage(websocket.TextMessage, message); err != nil {
-						delete(hub.clients, client)
-						client.Close()
-					}
 				}
 			}
 			hub.mu.RUnlock()
@@ -370,12 +399,95 @@ func (s *Server) jsonMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// authMiddleware checks for valid authentication when auth is required
+func (s *Server) authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// If auth is not required, allow all requests
+		if !s.config.Web.AuthRequired {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Check for session token
+		token := r.Header.Get("Authorization")
+		if token == "" {
+			// Try cookie
+			if cookie, err := r.Cookie("session_token"); err == nil {
+				token = cookie.Value
+			}
+		} else {
+			// Remove "Bearer " prefix if present
+			token = strings.TrimPrefix(token, "Bearer ")
+		}
+
+		if token == "" {
+			http.Error(w, "Authentication required", http.StatusUnauthorized)
+			return
+		}
+
+		// Check if session is valid
+		s.sessionsMu.RLock()
+		expiry, exists := s.sessions[token]
+		s.sessionsMu.RUnlock()
+
+		if !exists || time.Now().After(expiry) {
+			// Clean up expired session
+			if exists {
+				s.sessionsMu.Lock()
+				delete(s.sessions, token)
+				s.sessionsMu.Unlock()
+			}
+			http.Error(w, "Invalid or expired session", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// generateSessionToken generates a secure random session token
+func (s *Server) generateSessionToken() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(bytes), nil
+}
+
+// cleanupExpiredSessions removes expired sessions (should be called periodically)
+func (s *Server) cleanupExpiredSessions() {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+
+	now := time.Now()
+	for token, expiry := range s.sessions {
+		if now.After(expiry) {
+			delete(s.sessions, token)
+		}
+	}
+}
+
+// startSessionCleanup runs periodic session cleanup
+func (s *Server) startSessionCleanup(ctx context.Context) {
+	ticker := time.NewTicker(time.Hour) // Clean up every hour
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.cleanupExpiredSessions()
+		}
+	}
+}
+
 // API Handlers
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	stats := s.repeaterManager.GetStats()
 
 	response := map[string]interface{}{
-		"uptime":            time.Since(time.Now().Add(-24*time.Hour)).Seconds(), // Placeholder
+		"uptime":            int(time.Since(s.startTime).Seconds()),
 		"activeRepeaters":   stats.ActiveRepeaters,
 		"totalConnections":  stats.TotalConnections,
 		"totalPackets":      stats.TotalPackets,
@@ -535,4 +647,132 @@ func (s *Server) handleGetLoggingConfig(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleUpdateLoggingConfig(w http.ResponseWriter, r *http.Request) {
 	// This would update the logging configuration
 	json.NewEncoder(w).Encode(map[string]string{"status": "not implemented"})
+}
+
+// Authentication handlers
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	// If auth is not required, deny login attempts
+	if !s.config.Web.AuthRequired {
+		http.Error(w, "Authentication not configured", http.StatusBadRequest)
+		return
+	}
+
+	var loginRequest struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&loginRequest); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Use constant-time comparison to prevent timing attacks
+	usernameMatch := subtle.ConstantTimeCompare([]byte(loginRequest.Username), []byte(s.config.Web.Username)) == 1
+	passwordMatch := subtle.ConstantTimeCompare([]byte(loginRequest.Password), []byte(s.config.Web.Password)) == 1
+
+	if !usernameMatch || !passwordMatch {
+		s.logger.Warn("Failed login attempt", logger.String("username", loginRequest.Username), logger.String("remote_addr", r.RemoteAddr))
+		time.Sleep(time.Second) // Add delay to slow down brute force attacks
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	// Generate session token
+	token, err := s.generateSessionToken()
+	if err != nil {
+		s.logger.Error("Failed to generate session token", logger.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Store session with 24-hour expiry
+	expiry := time.Now().Add(24 * time.Hour)
+	s.sessionsMu.Lock()
+	s.sessions[token] = expiry
+	s.sessionsMu.Unlock()
+
+	s.logger.Info("Successful login", logger.String("username", loginRequest.Username), logger.String("remote_addr", r.RemoteAddr))
+
+	// Set cookie and return token
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    token,
+		Expires:  expiry,
+		HttpOnly: true,
+		Secure:   r.TLS != nil, // Only secure if HTTPS
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+	})
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"token":   token,
+		"expires": expiry.Format(time.RFC3339),
+	})
+}
+
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	// Get token from header or cookie
+	token := r.Header.Get("Authorization")
+	if token == "" {
+		if cookie, err := r.Cookie("session_token"); err == nil {
+			token = cookie.Value
+		}
+	} else {
+		token = strings.TrimPrefix(token, "Bearer ")
+	}
+
+	if token != "" {
+		// Remove session
+		s.sessionsMu.Lock()
+		delete(s.sessions, token)
+		s.sessionsMu.Unlock()
+
+		// Clear cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     "session_token",
+			Value:    "",
+			Expires:  time.Now().Add(-time.Hour),
+			HttpOnly: true,
+			Path:     "/",
+		})
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{"success": "logged out"})
+}
+
+func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
+	response := map[string]interface{}{
+		"auth_required": s.config.Web.AuthRequired,
+		"authenticated": false,
+	}
+
+	if s.config.Web.AuthRequired {
+		// Check if currently authenticated
+		token := r.Header.Get("Authorization")
+		if token == "" {
+			if cookie, err := r.Cookie("session_token"); err == nil {
+				token = cookie.Value
+			}
+		} else {
+			token = strings.TrimPrefix(token, "Bearer ")
+		}
+
+		if token != "" {
+			s.sessionsMu.RLock()
+			expiry, exists := s.sessions[token]
+			s.sessionsMu.RUnlock()
+
+			if exists && time.Now().Before(expiry) {
+				response["authenticated"] = true
+				response["expires"] = expiry.Format(time.RFC3339)
+			}
+		}
+	} else {
+		// If auth not required, consider always authenticated
+		response["authenticated"] = true
+	}
+
+	json.NewEncoder(w).Encode(response)
 }

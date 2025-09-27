@@ -3,8 +3,8 @@
     <!-- Header -->
     <div class="flex justify-between items-center">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Talk Logs</h1>
-        <p class="text-gray-600">History of voice transmissions</p>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Talk Logs</h1>
+        <p class="text-gray-600 dark:text-gray-400">History of voice transmissions</p>
       </div>
       <div class="flex items-center space-x-3">
         <select v-model="selectedLimit" @change="fetchLogs" class="rounded-md border-gray-300 text-sm">
@@ -32,56 +32,56 @@
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
       <div class="card">
         <div class="flex items-center">
-          <div class="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
-            <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-8 h-8 bg-primary-100 dark:bg-primary-800/20 rounded-lg flex items-center justify-center">
+            <svg class="w-5 h-5 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Total Transmissions</p>
-            <p class="text-xl font-semibold text-gray-900">{{ talkLogs.length }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Transmissions</p>
+            <p class="text-xl font-semibold text-gray-900 dark:text-white">{{ talkLogs.length }}</p>
           </div>
         </div>
       </div>
 
       <div class="card">
         <div class="flex items-center">
-          <div class="w-8 h-8 bg-success-100 rounded-lg flex items-center justify-center">
-            <svg class="w-5 h-5 text-success-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-8 h-8 bg-success-100 dark:bg-success-800/20 rounded-lg flex items-center justify-center">
+            <svg class="w-5 h-5 text-success-600 dark:text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Total Duration</p>
-            <p class="text-xl font-semibold text-gray-900">{{ formatDuration(totalDuration) }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Duration</p>
+            <p class="text-xl font-semibold text-gray-900 dark:text-white">{{ formatDuration(totalDuration) }}</p>
           </div>
         </div>
       </div>
 
       <div class="card">
         <div class="flex items-center">
-          <div class="w-8 h-8 bg-warning-100 rounded-lg flex items-center justify-center">
-            <svg class="w-5 h-5 text-warning-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-8 h-8 bg-warning-100 dark:bg-warning-800/20 rounded-lg flex items-center justify-center">
+            <svg class="w-5 h-5 text-warning-600 dark:text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Average Duration</p>
-            <p class="text-xl font-semibold text-gray-900">{{ formatDuration(averageDuration) }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Average Duration</p>
+            <p class="text-xl font-semibold text-gray-900 dark:text-white">{{ formatDuration(averageDuration) }}</p>
           </div>
         </div>
       </div>
 
       <div class="card">
         <div class="flex items-center">
-          <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-8 h-8 bg-purple-100 dark:bg-purple-800/20 rounded-lg flex items-center justify-center">
+            <svg class="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Unique Callsigns</p>
-            <p class="text-xl font-semibold text-gray-900">{{ uniqueCallsigns.size }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Unique Callsigns</p>
+            <p class="text-xl font-semibold text-gray-900 dark:text-white">{{ uniqueCallsigns.size }}</p>
           </div>
         </div>
       </div>
@@ -337,6 +337,16 @@ export default {
     // Watch for filter changes to reset pagination
     watch([callsignFilter, timeFilter, durationFilter], () => {
       currentPage.value = 1
+    })
+
+    // Watch for talk events to refresh logs
+    let previousTalkerCount = store.activeTalkers.length
+    watch(() => store.activeTalkers.length, (newCount) => {
+      // If talker count decreased (someone stopped talking), refresh logs
+      if (newCount < previousTalkerCount) {
+        setTimeout(() => fetchLogs(), 500) // Small delay to ensure server has processed
+      }
+      previousTalkerCount = newCount
     })
 
     onMounted(() => {

@@ -1,8 +1,8 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install dependencies
-RUN apk add --no-cache git make
+RUN apk add --no-cache git make nodejs npm
 
 # Set working directory
 WORKDIR /app
@@ -16,8 +16,8 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
-RUN make build-linux
+# Build frontend first, then the application natively
+RUN make frontend && make build-native
 
 # Final stage
 FROM alpine:latest
@@ -32,7 +32,7 @@ RUN addgroup -S ysf && adduser -S ysf -G ysf
 WORKDIR /app
 
 # Copy binary from builder stage
-COPY --from=builder /app/bin/ysf-nexus-linux ./ysf-nexus
+COPY --from=builder /app/bin/ysf-nexus-native ./ysf-nexus
 
 # Copy example config
 COPY --from=builder /app/configs/config.example.yaml ./config.example.yaml

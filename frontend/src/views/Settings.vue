@@ -2,37 +2,37 @@
   <div class="space-y-6">
     <!-- Header -->
     <div>
-      <h1 class="text-2xl font-bold text-gray-900">Settings</h1>
-      <p class="text-gray-600">Configure your YSF Nexus reflector</p>
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
+      <p class="text-gray-600 dark:text-gray-400">Configure your YSF Nexus reflector</p>
     </div>
 
     <!-- System Information -->
     <div class="card">
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">System Information</h2>
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">System Information</h2>
       <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <dt class="text-sm font-medium text-gray-500">Version</dt>
-          <dd class="text-sm text-gray-900">{{ systemInfo.version || 'Loading...' }}</dd>
+          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Version</dt>
+          <dd class="text-sm text-gray-900 dark:text-gray-300">{{ systemInfo.version || 'Loading...' }}</dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-gray-500">Build Time</dt>
-          <dd class="text-sm text-gray-900">{{ systemInfo.buildTime || 'Loading...' }}</dd>
+          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Build Time</dt>
+          <dd class="text-sm text-gray-900 dark:text-gray-300">{{ systemInfo.buildTime || 'Loading...' }}</dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-gray-500">Server Host</dt>
-          <dd class="text-sm text-gray-900">{{ systemInfo.host || 'Loading...' }}</dd>
+          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Server Host</dt>
+          <dd class="text-sm text-gray-900 dark:text-gray-300">{{ systemInfo.host || 'Loading...' }}</dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-gray-500">Server Port</dt>
-          <dd class="text-sm text-gray-900">{{ systemInfo.port || 'Loading...' }}</dd>
+          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Server Port</dt>
+          <dd class="text-sm text-gray-900 dark:text-gray-300">{{ systemInfo.port || 'Loading...' }}</dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-gray-500">Max Connections</dt>
-          <dd class="text-sm text-gray-900">{{ systemInfo.maxConnections || 'Loading...' }}</dd>
+          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Max Connections</dt>
+          <dd class="text-sm text-gray-900 dark:text-gray-300">{{ systemInfo.maxConnections || 'Loading...' }}</dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-gray-500">Timeout</dt>
-          <dd class="text-sm text-gray-900">{{ systemInfo.timeout || 'Loading...' }}</dd>
+          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Timeout</dt>
+          <dd class="text-sm text-gray-900 dark:text-gray-300">{{ systemInfo.timeout || 'Loading...' }}</dd>
         </div>
       </dl>
     </div>
@@ -40,7 +40,7 @@
     <!-- Server Configuration -->
     <div class="card">
       <div class="flex justify-between items-center mb-4">
-        <h2 class="text-lg font-semibold text-gray-900">Server Configuration</h2>
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Server Configuration</h2>
         <div class="flex space-x-2">
           <button @click="resetServerConfig" class="btn-secondary">Reset</button>
           <button @click="saveServerConfig" :disabled="saving" class="btn-primary">
@@ -54,46 +54,46 @@
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Reflector Name</label>
+          <label class="form-label">Reflector Name</label>
           <input
             v-model="serverConfig.name"
             type="text"
-            class="w-full rounded-md border-gray-300"
+            class="form-input"
             placeholder="YSF Nexus"
           />
-          <p class="text-xs text-gray-500 mt-1">Maximum 16 characters</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Maximum 16 characters</p>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <label class="form-label">Description</label>
           <input
             v-model="serverConfig.description"
             type="text"
-            class="w-full rounded-md border-gray-300"
+            class="form-input"
             placeholder="Go Reflector"
           />
-          <p class="text-xs text-gray-500 mt-1">Maximum 14 characters</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Maximum 14 characters</p>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Max Connections</label>
+          <label class="form-label">Max Connections</label>
           <input
             v-model.number="serverConfig.maxConnections"
             type="number"
             min="1"
             max="1000"
-            class="w-full rounded-md border-gray-300"
+            class="form-input"
           />
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Connection Timeout (minutes)</label>
+          <label class="form-label">Connection Timeout (minutes)</label>
           <input
             v-model.number="serverConfig.timeoutMinutes"
             type="number"
             min="1"
             max="60"
-            class="w-full rounded-md border-gray-300"
+            class="form-input"
           />
         </div>
       </div>
@@ -102,7 +102,7 @@
     <!-- Blocklist Management -->
     <div class="card">
       <div class="flex justify-between items-center mb-4">
-        <h2 class="text-lg font-semibold text-gray-900">Blocklist Management</h2>
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Blocklist Management</h2>
         <div class="flex items-center space-x-2">
           <label class="flex items-center">
             <input
@@ -110,14 +110,14 @@
               type="checkbox"
               class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
             />
-            <span class="ml-2 text-sm text-gray-700">Enable blocklist</span>
+            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Enable blocklist</span>
           </label>
         </div>
       </div>
 
       <div v-if="blocklistConfig.enabled" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">Blocked Callsigns</label>
+          <label class="form-label mb-2">Blocked Callsigns</label>
           <div class="space-y-2">
             <div
               v-for="(callsign, index) in blocklistConfig.callsigns"
@@ -127,7 +127,7 @@
               <input
                 v-model="blocklistConfig.callsigns[index]"
                 type="text"
-                class="flex-1 rounded-md border-gray-300"
+                class="flex-1 form-input"
                 placeholder="Enter callsign"
               />
               <button
@@ -155,7 +155,7 @@
     <!-- Logging Configuration -->
     <div class="card">
       <div class="flex justify-between items-center mb-4">
-        <h2 class="text-lg font-semibold text-gray-900">Logging Configuration</h2>
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Logging Configuration</h2>
         <div class="flex space-x-2">
           <button @click="resetLoggingConfig" class="btn-secondary">Reset</button>
           <button @click="saveLoggingConfig" :disabled="saving" class="btn-primary">
@@ -166,8 +166,8 @@
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Log Level</label>
-          <select v-model="loggingConfig.level" class="w-full rounded-md border-gray-300">
+          <label class="form-label">Log Level</label>
+          <select v-model="loggingConfig.level" class="form-select">
             <option value="debug">Debug</option>
             <option value="info">Info</option>
             <option value="warn">Warning</option>
@@ -176,32 +176,32 @@
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Log Format</label>
-          <select v-model="loggingConfig.format" class="w-full rounded-md border-gray-300">
+          <label class="form-label">Log Format</label>
+          <select v-model="loggingConfig.format" class="form-select">
             <option value="text">Text</option>
             <option value="json">JSON</option>
           </select>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Log File</label>
+          <label class="form-label">Log File</label>
           <input
             v-model="loggingConfig.file"
             type="text"
-            class="w-full rounded-md border-gray-300"
+            class="form-input"
             placeholder="/var/log/ysf-nexus.log (optional)"
           />
-          <p class="text-xs text-gray-500 mt-1">Leave empty to log to console only</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Leave empty to log to console only</p>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Max File Size (MB)</label>
+          <label class="form-label">Max File Size (MB)</label>
           <input
             v-model.number="loggingConfig.maxSize"
             type="number"
             min="1"
             max="1000"
-            class="w-full rounded-md border-gray-300"
+            class="form-input"
           />
         </div>
       </div>
@@ -209,7 +209,7 @@
 
     <!-- Actions -->
     <div class="card">
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">System Actions</h2>
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">System Actions</h2>
       <div class="flex flex-wrap gap-4">
         <button @click="exportConfig" class="btn-secondary">
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

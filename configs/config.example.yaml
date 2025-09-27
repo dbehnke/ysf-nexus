@@ -10,9 +10,9 @@ web:
   enabled: true
   host: "0.0.0.0"
   port: 8080
-  auth_required: false
-  # username: "admin"
-  # password: "changeme"
+  auth_required: false  # Set to true to protect settings with authentication
+  username: "admin"     # Required if auth_required is true
+  password: "changeme"  # Required if auth_required is true - CHANGE THIS!
 
 bridges:
   - name: "YSF001"

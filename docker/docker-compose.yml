@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   ysf-nexus:
     build:
@@ -10,71 +8,17 @@ services:
     ports:
       - "42000:42000/udp"  # YSF protocol
       - "8080:8080"        # Web dashboard
-      - "9090:9090"        # Prometheus metrics
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ysf_logs:/app/logs
     environment:
       - TZ=UTC
-    networks:
-      - ysf-network
-
-  # Optional: MQTT broker
-  mosquitto:
-    image: eclipse-mosquitto:2.0
-    container_name: ysf-mosquitto
-    restart: unless-stopped
-    ports:
-      - "1883:1883"
-      - "9001:9001"
-    volumes:
-      - mosquitto_data:/mosquitto/data
-      - mosquitto_logs:/mosquitto/log
-      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-    networks:
-      - ysf-network
-
-  # Optional: Prometheus for metrics
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: ysf-prometheus
-    restart: unless-stopped
-    ports:
-      - "9091:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
-      - '--web.enable-lifecycle'
-    networks:
-      - ysf-network
-
-  # Optional: Grafana for visualization
-  grafana:
-    image: grafana/grafana:latest
-    container_name: ysf-grafana
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    networks:
-      - ysf-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 volumes:
   ysf_logs:
-  mosquitto_data:
-  mosquitto_logs:
-  prometheus_data:
-  grafana_data:
-
-networks:
-  ysf-network:
-    driver: bridge

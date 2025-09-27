@@ -31,9 +31,9 @@ with web dashboard, MQTT integration, and bridge capabilities.`,
 
 	// Add flags
 	rootCmd.Flags().StringP("config", "c", "config.yaml", "Configuration file path")
-	rootCmd.Flags().StringP("host", "h", "", "Server host (overrides config)")
+	rootCmd.Flags().String("host", "", "Server host (overrides config)")
 	rootCmd.Flags().IntP("port", "p", 0, "Server port (overrides config)")
-	rootCmd.Flags().Bool("debug", false, "Enable debug logging (overrides config)")
+	rootCmd.Flags().BoolP("debug", "d", false, "Enable debug logging (overrides config)")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

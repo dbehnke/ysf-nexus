@@ -3,9 +3,17 @@ package repeater
 import (
 	"fmt"
 	"net"
+	"regexp"
 	"sync/atomic"
 	"time"
 )
+
+// maskIPAddress masks the last two octets of an IP address for privacy
+// Example: 192.168.1.100:42000 -> 192.168.**:42000
+func maskIPAddress(address string) string {
+	re := regexp.MustCompile(`^(\d+\.\d+\.)\d+\.\d+(:\d+)?$`)
+	return re.ReplaceAllString(address, "${1}**${2}")
+}
 
 // Repeater represents a connected YSF repeater
 type Repeater struct {
@@ -14,6 +22,7 @@ type Repeater struct {
 	connected    time.Time
 	lastSeen     time.Time
 	talkStart    *time.Time
+	lastTalkData *time.Time // Last time we received a data packet while talking
 	packetCount  uint64
 	bytesRx      uint64
 	bytesTx      uint64
@@ -109,6 +118,15 @@ func (r *Repeater) AddBytesTransmitted(bytes uint64) {
 func (r *Repeater) StartTalking() {
 	now := time.Now()
 	r.talkStart = &now
+	r.lastTalkData = &now
+}
+
+// UpdateTalkData updates the last talk data timestamp
+func (r *Repeater) UpdateTalkData() {
+	if r.IsTalking() {
+		now := time.Now()
+		r.lastTalkData = &now
+	}
 }
 
 // StopTalking marks the repeater as stopping to talk and returns the talk duration
@@ -119,7 +137,16 @@ func (r *Repeater) StopTalking() time.Duration {
 
 	duration := time.Since(*r.talkStart)
 	r.talkStart = nil
+	r.lastTalkData = nil
 	return duration
+}
+
+// IsTalkTimedOut checks if the talk session has timed out
+func (r *Repeater) IsTalkTimedOut(timeout time.Duration) bool {
+	if !r.IsTalking() || r.lastTalkData == nil {
+		return false
+	}
+	return time.Since(*r.lastTalkData) > timeout
 }
 
 // SetActive sets the active status of the repeater
@@ -141,7 +168,7 @@ func (r *Repeater) Uptime() time.Duration {
 func (r *Repeater) Stats() RepeaterStats {
 	return RepeaterStats{
 		Callsign:          r.callsign,
-		Address:           r.address.String(),
+		Address:           maskIPAddress(r.address.String()),
 		Connected:         r.connected,
 		LastSeen:          r.lastSeen,
 		PacketCount:       r.PacketCount(),
@@ -149,24 +176,24 @@ func (r *Repeater) Stats() RepeaterStats {
 		BytesTransmitted:  r.BytesTransmitted(),
 		IsActive:          r.isActive,
 		IsTalking:         r.IsTalking(),
-		TalkDuration:      r.TalkDuration(),
-		Uptime:            r.Uptime(),
+		TalkDuration:      int(r.TalkDuration().Seconds()),
+		Uptime:            int(r.Uptime().Seconds()),
 	}
 }
 
 // RepeaterStats represents repeater statistics
 type RepeaterStats struct {
-	Callsign          string        `json:"callsign"`
-	Address           string        `json:"address"`
-	Connected         time.Time     `json:"connected"`
-	LastSeen          time.Time     `json:"last_seen"`
-	PacketCount       uint64        `json:"packet_count"`
-	BytesReceived     uint64        `json:"bytes_received"`
-	BytesTransmitted  uint64        `json:"bytes_transmitted"`
-	IsActive          bool          `json:"is_active"`
-	IsTalking         bool          `json:"is_talking"`
-	TalkDuration      time.Duration `json:"talk_duration"`
-	Uptime            time.Duration `json:"uptime"`
+	Callsign          string    `json:"callsign"`
+	Address           string    `json:"address"`
+	Connected         time.Time `json:"connected"`
+	LastSeen          time.Time `json:"last_seen"`
+	PacketCount       uint64    `json:"packet_count"`
+	BytesReceived     uint64    `json:"bytes_received"`
+	BytesTransmitted  uint64    `json:"bytes_transmitted"`
+	IsActive          bool      `json:"is_active"`
+	IsTalking         bool      `json:"is_talking"`
+	TalkDuration      int       `json:"talk_duration"`      // in seconds
+	Uptime            int       `json:"uptime"`             // in seconds
 }
 
 // String returns a string representation of the repeater
