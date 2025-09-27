@@ -14,6 +14,11 @@ func TestInfoRxLogging(t *testing.T) {
 	// Setup server with debug=false and start it so handlePacket runs
 	s := NewServer("127.0.0.1", 43001)
 	s.SetDebug(false)
+	// Capture logs (restore previous writer when done)
+	var buf bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&buf)
+	defer log.SetOutput(prev)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -23,12 +28,6 @@ func TestInfoRxLogging(t *testing.T) {
 
 	// Give server time to start
 	time.Sleep(50 * time.Millisecond)
-
-	// Replace standard logger output (restore previous writer when done)
-	var buf bytes.Buffer
-	prev := log.Writer()
-	log.SetOutput(&buf)
-	defer log.SetOutput(prev)
 
 	// Dial server and send poll
 	serverAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:43001")
