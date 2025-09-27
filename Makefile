@@ -30,6 +30,9 @@ frontend: ## Build the frontend
 build-linux: ## Build for Linux
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o bin/$(BINARY_NAME)-linux ./cmd/ysf-nexus
 
+build-native: ## Build for native platform (current OS/ARCH)
+	CGO_ENABLED=0 $(GOBUILD) $(LDFLAGS) -o bin/$(BINARY_NAME)-native ./cmd/ysf-nexus
+
 build-windows: ## Build for Windows
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o bin/$(BINARY_NAME)-windows.exe ./cmd/ysf-nexus
 

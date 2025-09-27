@@ -16,8 +16,8 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build frontend first, then the application
-RUN make frontend && make build-linux
+# Build frontend first, then the application natively
+RUN make frontend && make build-native
 
 # Final stage
 FROM alpine:latest
@@ -32,7 +32,7 @@ RUN addgroup -S ysf && adduser -S ysf -G ysf
 WORKDIR /app
 
 # Copy binary from builder stage
-COPY --from=builder /app/bin/ysf-nexus-linux ./ysf-nexus
+COPY --from=builder /app/bin/ysf-nexus-native ./ysf-nexus
 
 # Copy example config
 COPY --from=builder /app/configs/config.example.yaml ./config.example.yaml
