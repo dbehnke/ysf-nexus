@@ -10,6 +10,7 @@ import (
 	"github.com/dbehnke/ysf-nexus/pkg/logger"
 	"github.com/dbehnke/ysf-nexus/pkg/network"
 	"github.com/dbehnke/ysf-nexus/pkg/repeater"
+	"github.com/dbehnke/ysf-nexus/pkg/web"
 )
 
 // Reflector represents the main YSF reflector application
@@ -18,6 +19,7 @@ type Reflector struct {
 	logger          *logger.Logger
 	server          *network.Server
 	repeaterManager *repeater.Manager
+	webServer       *web.Server
 	eventChan       chan repeater.Event
 	running         bool
 	mu              sync.RWMutex
@@ -43,6 +45,9 @@ func New(cfg *config.Config, log *logger.Logger) *Reflector {
 		cfg.Server.MaxConnections,
 		eventChan,
 	)
+
+	// Initialize web server
+	r.webServer = web.NewServer(cfg, log, r.repeaterManager, eventChan)
 
 	// Set up blocklist if configured
 	if cfg.Blocklist.Enabled && len(cfg.Blocklist.Callsigns) > 0 {
@@ -94,6 +99,15 @@ func (r *Reflector) Start(ctx context.Context) error {
 	go func() {
 		defer wg.Done()
 		r.logStats(ctx)
+	}()
+
+	// Start web server
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := r.webServer.Start(ctx); err != nil {
+			r.logger.Error("Web server error", logger.Error(err))
+		}
 	}()
 
 	// Start network server (blocking)

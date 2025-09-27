@@ -56,3 +56,9 @@ temp/
 
 # Air live reload
 tmp/
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+pkg/web/dist/*
+!pkg/web/dist/index.html
