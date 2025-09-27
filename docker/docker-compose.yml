@@ -1,0 +1,24 @@
+services:
+  ysf-nexus:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ysf-nexus
+    restart: unless-stopped
+    ports:
+      - "42000:42000/udp"  # YSF protocol
+      - "8080:8080"        # Web dashboard
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ysf_logs:/app/logs
+    environment:
+      - TZ=UTC
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  ysf_logs:
