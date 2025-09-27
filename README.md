@@ -33,7 +33,7 @@ YSF Nexus leverages Go's excellent concurrency model to efficiently handle I/O-h
 ## 🔧 Quick Start
 
 ### Prerequisites
-- Go 1.21 or later
+- Go 1.25 or later
 - Docker (optional)
 
 ### Installation
@@ -153,7 +153,7 @@ Real-time events are published to MQTT topics:
 ## 🧪 Development
 
 ### Prerequisites
-- Go 1.21+
+- Go 1.25+
 - Make
 
 ### Building
