@@ -23,20 +23,25 @@ jobs:
         run: |
           # Build golangci-lint with the runner's Go toolchain to avoid
           # mismatches between the binary's build Go version and the
-          # repository's targeted Go version. Install into GOPATH/bin and
-          # copy to /usr/local/bin so the binary is available to subsequent
-          # steps without requiring step-local PATH changes.
+          # repository's targeted Go version. Install into a temporary
+          # GOBIN and persist that directory into $GITHUB_PATH so subsequent
+          # steps can invoke the binary without needing sudo or step-local
+          # PATH hacks. We intentionally use @latest to get the latest
+          # released golangci-lint (you requested not to pin releases).
+          echo "Installing golangci-lint@latest"
+          export GOBIN="$RUNNER_TEMP/gobin"
+          mkdir -p "$GOBIN"
+          export PATH="$GOBIN:$PATH"
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          LINT_BIN="$(go env GOPATH)/bin/golangci-lint"
+          LINT_BIN="$GOBIN/golangci-lint"
           echo "built: $LINT_BIN"
-          if [ -f "$LINT_BIN" ]; then
-            sudo cp "$LINT_BIN" /usr/local/bin/
-            sudo chmod +x /usr/local/bin/golangci-lint
-          else
+          if [ ! -f "$LINT_BIN" ]; then
             echo "golangci-lint binary not found at $LINT_BIN" >&2
             exit 1
           fi
-          /usr/local/bin/golangci-lint --version
+          # Add the GOBIN to the job PATH for subsequent steps
+          echo "$GOBIN" >> "$GITHUB_PATH"
+          golangci-lint --version
 
       - name: Run golangci-lint
         run: |
