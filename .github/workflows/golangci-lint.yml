@@ -19,14 +19,17 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: Install golangci-lint (action, build from source)
-        uses: golangci/golangci-lint-action@v4
-        with:
-          # Request the golangci-lint v2 series. The action will resolve the
-          # latest v2.x release. Keep install-mode=source so the binary is
-          # compiled with the runner's Go toolchain (avoids Go-version mismatch).
-          version: "v2"
-          install-mode: source
+      - name: Install golangci-lint (build from source with go install)
+        run: |
+          # Build golangci-lint with the runner's Go toolchain to avoid
+          # mismatches between the binary's build Go version and the
+          # repository's targeted Go version. Using the module path lets
+          # `go install ...@latest` resolve v2 when it exists.
+          export GOBIN="$RUNNER_TEMP/gobin"
+          mkdir -p "$GOBIN"
+          export PATH="$GOBIN:$PATH"
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          golangci-lint --version
 
       - name: Run golangci-lint
         run: |
