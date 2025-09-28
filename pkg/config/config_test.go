@@ -193,10 +193,10 @@ func TestLoadNonExistentFile(t *testing.T) {
 
 func TestValidation(t *testing.T) {
 	tests := []struct {
-		name       string
-		config     string
-		expectErr  bool
-		errorMsg   string
+		name      string
+		config    string
+		expectErr bool
+		errorMsg  string
 	}{
 		{
 			name: "Invalid port",

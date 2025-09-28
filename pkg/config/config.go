@@ -69,12 +69,12 @@ type BlocklistConfig struct {
 
 // LoggingConfig holds logging configuration
 type LoggingConfig struct {
-	Level       string `mapstructure:"level"`
-	Format      string `mapstructure:"format"`
-	File        string `mapstructure:"file"`
-	MaxSize     int    `mapstructure:"max_size"`
-	MaxBackups  int    `mapstructure:"max_backups"`
-	MaxAge      int    `mapstructure:"max_age"`
+	Level      string `mapstructure:"level"`
+	Format     string `mapstructure:"format"`
+	File       string `mapstructure:"file"`
+	MaxSize    int    `mapstructure:"max_size"`
+	MaxBackups int    `mapstructure:"max_backups"`
+	MaxAge     int    `mapstructure:"max_age"`
 }
 
 // MetricsConfig holds metrics configuration

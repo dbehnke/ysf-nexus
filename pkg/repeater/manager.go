@@ -10,24 +10,24 @@ import (
 
 // Manager manages multiple YSF repeaters
 type Manager struct {
-	repeaters   sync.Map
-	timeout     time.Duration
-	blocklist   *Blocklist
-	events      chan<- Event
+	repeaters    sync.Map
+	timeout      time.Duration
+	blocklist    *Blocklist
+	events       chan<- Event
 	maxRepeaters int
-	mu          sync.RWMutex
-	metrics     ManagerMetrics
+	mu           sync.RWMutex
+	metrics      ManagerMetrics
 }
 
 // ManagerMetrics holds manager statistics
 type ManagerMetrics struct {
-	TotalConnections    uint64
-	ActiveConnections   uint64
-	BlockedConnections  uint64
-	TimeoutConnections  uint64
-	TotalPackets        uint64
-	TotalBytesRx        uint64
-	TotalBytesTx        uint64
+	TotalConnections   uint64
+	ActiveConnections  uint64
+	BlockedConnections uint64
+	TimeoutConnections uint64
+	TotalPackets       uint64
+	TotalBytesRx       uint64
+	TotalBytesTx       uint64
 }
 
 // Event represents a repeater event
@@ -292,14 +292,14 @@ func (m *Manager) GetStats() ManagerStats {
 	})
 
 	return ManagerStats{
-		ActiveRepeaters:     len(repeaterStats),
-		TotalConnections:    m.metrics.TotalConnections,
-		BlockedConnections:  m.metrics.BlockedConnections,
-		TimeoutConnections:  m.metrics.TimeoutConnections,
-		TotalPackets:        m.metrics.TotalPackets,
-		TotalBytesReceived:  m.metrics.TotalBytesRx,
+		ActiveRepeaters:       len(repeaterStats),
+		TotalConnections:      m.metrics.TotalConnections,
+		BlockedConnections:    m.metrics.BlockedConnections,
+		TimeoutConnections:    m.metrics.TimeoutConnections,
+		TotalPackets:          m.metrics.TotalPackets,
+		TotalBytesReceived:    m.metrics.TotalBytesRx,
 		TotalBytesTransmitted: m.metrics.TotalBytesTx,
-		Repeaters:           repeaterStats,
+		Repeaters:             repeaterStats,
 	}
 }
 

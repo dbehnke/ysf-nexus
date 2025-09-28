@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -144,8 +145,25 @@ func (s *Server) handlePacket(data []byte, addr *net.UDPAddr) {
 	// Update metrics
 	s.updateMetrics(data, true)
 
-	if s.debug {
-		log.Printf("Received %d bytes from %s: %x", len(data), addr, data[:min(len(data), 16)])
+	// Determine packet type for logging (use first 4 bytes when available)
+	pktType := ""
+	if len(data) >= 4 {
+		pktType = string(data[:4])
+	} else if len(data) > 0 {
+		pktType = string(data)
+	}
+
+	isYSF := len(data) >= 3 && string(data[:3]) == "YSF"
+	if isYSF {
+		if s.debug {
+			log.Printf("YSF RX %d bytes from %s:\n%s", len(data), addr, hexdumpSideBySide(data))
+		} else {
+			// minimal info-level line when debug is off: show actual packet type
+			if pktType == "" {
+				pktType = "YSF"
+			}
+			log.Printf("INFO: %s RX from %s", pktType, addr)
+		}
 	}
 
 	// Parse packet
@@ -159,6 +177,15 @@ func (s *Server) handlePacket(data []byte, addr *net.UDPAddr) {
 
 	if s.debug {
 		log.Printf("Parsed packet: %s", packet.String())
+	}
+
+	// When debug is off, emit concise INFO-level logging including packet type, size, and callsign (if present)
+	if !s.debug && isYSF {
+		info := fmt.Sprintf("INFO: %s RX from %s size=%d", packet.Type, packet.Source, len(packet.Data))
+		if packet.Callsign != "" {
+			info = fmt.Sprintf("%s callsign=%s", info, packet.Callsign)
+		}
+		log.Print(info)
 	}
 
 	// Find handler for packet type
@@ -193,7 +220,21 @@ func (s *Server) SendPacket(data []byte, addr *net.UDPAddr) error {
 	// Update metrics
 	s.updateMetrics(data, false)
 
-	if s.debug {
+	// YSF TX logging
+	if len(data) >= 3 && string(data[:3]) == "YSF" {
+		pktType := ""
+		if len(data) >= 4 {
+			pktType = string(data[:4])
+		} else {
+			pktType = "YSF"
+		}
+
+		if s.debug {
+			log.Printf("YSF TX %d bytes to %s:\n%s", n, addr, hexdumpSideBySide(data))
+		} else {
+			log.Printf("INFO: %s TX to %s size=%d", pktType, addr, n)
+		}
+	} else if s.debug {
 		log.Printf("Sent %d bytes to %s: %x", n, addr, data[:min(len(data), 16)])
 	}
 
@@ -282,4 +323,37 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// hexdumpSideBySide returns a simple side-by-side hex + ASCII dump of data
+func hexdumpSideBySide(b []byte) string {
+	var sb strings.Builder
+	const cols = 16
+	for i := 0; i < len(b); i += cols {
+		end := min(i+cols, len(b))
+		chunk := b[i:end]
+
+		// hex
+		for j := 0; j < cols; j++ {
+			if i+j < len(b) {
+				sb.WriteString(fmt.Sprintf("%02x ", b[i+j]))
+			} else {
+				sb.WriteString("   ")
+			}
+		}
+
+		sb.WriteString(" | ")
+
+		// ascii
+		for _, c := range chunk {
+			if c >= 32 && c <= 126 {
+				sb.WriteByte(c)
+			} else {
+				sb.WriteByte('.')
+			}
+		}
+
+		sb.WriteString("\n")
+	}
+	return sb.String()
 }

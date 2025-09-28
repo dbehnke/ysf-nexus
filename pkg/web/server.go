@@ -487,12 +487,12 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	stats := s.repeaterManager.GetStats()
 
 	response := map[string]interface{}{
-		"uptime":            int(time.Since(s.startTime).Seconds()),
-		"activeRepeaters":   stats.ActiveRepeaters,
-		"totalConnections":  stats.TotalConnections,
-		"totalPackets":      stats.TotalPackets,
-		"bytesReceived":     stats.TotalBytesReceived,
-		"bytesSent":         stats.TotalBytesTransmitted,
+		"uptime":           int(time.Since(s.startTime).Seconds()),
+		"activeRepeaters":  stats.ActiveRepeaters,
+		"totalConnections": stats.TotalConnections,
+		"totalPackets":     stats.TotalPackets,
+		"bytesReceived":    stats.TotalBytesReceived,
+		"bytesSent":        stats.TotalBytesTransmitted,
 	}
 
 	json.NewEncoder(w).Encode(response)
@@ -608,10 +608,10 @@ func (s *Server) sendWebSocketMessage(conn *websocket.Conn, messageType string, 
 // Configuration handlers (placeholder implementations)
 func (s *Server) handleGetServerConfig(w http.ResponseWriter, r *http.Request) {
 	config := map[string]interface{}{
-		"name":              s.config.Server.Name,
-		"description":       s.config.Server.Description,
-		"maxConnections":    s.config.Server.MaxConnections,
-		"timeoutMinutes":    int(s.config.Server.Timeout.Minutes()),
+		"name":           s.config.Server.Name,
+		"description":    s.config.Server.Description,
+		"maxConnections": s.config.Server.MaxConnections,
+		"timeoutMinutes": int(s.config.Server.Timeout.Minutes()),
 	}
 	json.NewEncoder(w).Encode(config)
 }

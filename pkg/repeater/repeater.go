@@ -167,33 +167,33 @@ func (r *Repeater) Uptime() time.Duration {
 // Stats returns a snapshot of repeater statistics
 func (r *Repeater) Stats() RepeaterStats {
 	return RepeaterStats{
-		Callsign:          r.callsign,
-		Address:           maskIPAddress(r.address.String()),
-		Connected:         r.connected,
-		LastSeen:          r.lastSeen,
-		PacketCount:       r.PacketCount(),
-		BytesReceived:     r.BytesReceived(),
-		BytesTransmitted:  r.BytesTransmitted(),
-		IsActive:          r.isActive,
-		IsTalking:         r.IsTalking(),
-		TalkDuration:      int(r.TalkDuration().Seconds()),
-		Uptime:            int(r.Uptime().Seconds()),
+		Callsign:         r.callsign,
+		Address:          maskIPAddress(r.address.String()),
+		Connected:        r.connected,
+		LastSeen:         r.lastSeen,
+		PacketCount:      r.PacketCount(),
+		BytesReceived:    r.BytesReceived(),
+		BytesTransmitted: r.BytesTransmitted(),
+		IsActive:         r.isActive,
+		IsTalking:        r.IsTalking(),
+		TalkDuration:     int(r.TalkDuration().Seconds()),
+		Uptime:           int(r.Uptime().Seconds()),
 	}
 }
 
 // RepeaterStats represents repeater statistics
 type RepeaterStats struct {
-	Callsign          string    `json:"callsign"`
-	Address           string    `json:"address"`
-	Connected         time.Time `json:"connected"`
-	LastSeen          time.Time `json:"last_seen"`
-	PacketCount       uint64    `json:"packet_count"`
-	BytesReceived     uint64    `json:"bytes_received"`
-	BytesTransmitted  uint64    `json:"bytes_transmitted"`
-	IsActive          bool      `json:"is_active"`
-	IsTalking         bool      `json:"is_talking"`
-	TalkDuration      int       `json:"talk_duration"`      // in seconds
-	Uptime            int       `json:"uptime"`             // in seconds
+	Callsign         string    `json:"callsign"`
+	Address          string    `json:"address"`
+	Connected        time.Time `json:"connected"`
+	LastSeen         time.Time `json:"last_seen"`
+	PacketCount      uint64    `json:"packet_count"`
+	BytesReceived    uint64    `json:"bytes_received"`
+	BytesTransmitted uint64    `json:"bytes_transmitted"`
+	IsActive         bool      `json:"is_active"`
+	IsTalking        bool      `json:"is_talking"`
+	TalkDuration     int       `json:"talk_duration"` // in seconds
+	Uptime           int       `json:"uptime"`        // in seconds
 }
 
 // String returns a string representation of the repeater
