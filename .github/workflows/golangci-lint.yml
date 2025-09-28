@@ -19,13 +19,12 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: Install golangci-lint v2 (download release)
+      - name: Install golangci-lint v2 (build with runner Go)
         run: |
-          mkdir -p $GITHUB_WORKSPACE/.bin
-          curl -sSL https://github.com/golangci/golangci-lint/releases/download/v2.0.0/golangci-lint-2.0.0-linux-amd64.tar.gz -o /tmp/golangci-lint.tar.gz
-          tar -xzf /tmp/golangci-lint.tar.gz -C /tmp
-          mv /tmp/golangci-lint-2.0.0-linux-amd64/golangci-lint $GITHUB_WORKSPACE/.bin/
-          echo "$GITHUB_WORKSPACE/.bin" >> $GITHUB_PATH
+          # Build the v2 golangci-lint binary with the runner's Go to ensure the
+          # tool is built with Go >= the targeted Go version used in the repo.
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.0.0
+          echo "$GOPATH/bin" >> $GITHUB_PATH
 
       - name: Run golangci-lint
         run: |
