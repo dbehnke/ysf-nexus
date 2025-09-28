@@ -22,7 +22,10 @@ jobs:
       - name: Install golangci-lint (action, build from source)
         uses: golangci/golangci-lint-action@v4
         with:
-          version: latest
+          # Request the golangci-lint v2 series. The action will resolve the
+          # latest v2.x release. Keep install-mode=source so the binary is
+          # compiled with the runner's Go toolchain (avoids Go-version mismatch).
+          version: "v2"
           install-mode: source
 
       - name: Run golangci-lint
