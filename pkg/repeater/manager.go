@@ -15,10 +15,12 @@ type Manager struct {
 	// activeKey holds the address string of the currently active (allowed) repeater
 	activeKey    string
 	activeMu     sync.Mutex
-	// muted repeaters are those that exceeded max talk duration and are muted until they stop
-	muted        sync.Map // map[string]bool
-	// maximum allowed continuous talk duration before muting (default 180s)
+	// muted repeaters map address -> unmute until time (zero means muted until they stop)
+	muted        sync.Map // map[string]time.Time
+	// maximum allowed continuous talk duration before muting
 	talkMaxDuration time.Duration
+	// duration after which a muted repeater will be automatically unmuted (0 = mute until stop)
+	unmuteAfter time.Duration
 	blocklist    *Blocklist
 	events       chan<- Event
 	maxRepeaters int
@@ -57,13 +59,14 @@ const (
 )
 
 // NewManager creates a new repeater manager
-func NewManager(timeout time.Duration, maxRepeaters int, eventChan chan<- Event) *Manager {
+func NewManager(timeout time.Duration, maxRepeaters int, eventChan chan<- Event, talkMaxDuration, unmuteAfter time.Duration) *Manager {
 	return &Manager{
-		timeout:      timeout,
-		maxRepeaters: maxRepeaters,
-		events:       eventChan,
-		blocklist:    NewBlocklist(),
-		talkMaxDuration: 180 * time.Second,
+		timeout:         timeout,
+		maxRepeaters:    maxRepeaters,
+		events:          eventChan,
+		blocklist:       NewBlocklist(),
+		talkMaxDuration: talkMaxDuration,
+		unmuteAfter:     unmuteAfter,
 	}
 }
 
@@ -199,10 +202,20 @@ func (m *Manager) ProcessPacket(callsign string, addr *net.UDPAddr, packetType s
 
 	// Handle talk state changes for data packets
 	if packetType == "YSFD" {
-		// If this repeater is muted, ignore new talk data
-		if _, muted := m.muted.Load(addr.String()); muted {
-			// still update last seen but do not change talk state
-			return
+		// If this repeater is muted, check if mute expired
+		if v, muted := m.muted.Load(addr.String()); muted {
+			if until, ok := v.(time.Time); ok {
+				if !until.IsZero() && time.Now().After(until) {
+					// unmute automatically
+					m.muted.Delete(addr.String())
+				} else {
+					// still muted
+					return
+				}
+			} else {
+				// unknown value type - treat as muted
+				return
+			}
 		}
 
 		// Enforce single active stream: only allow the first active repeater
@@ -228,7 +241,12 @@ func (m *Manager) ProcessPacket(callsign string, addr *net.UDPAddr, packetType s
 			if repeater.TalkDuration() > m.talkMaxDuration {
 				// mute and stop talking
 				repeater.StopTalking()
-				m.muted.Store(addr.String(), true)
+				// compute unmute time (zero means muted until they stop)
+				var unmuteUntil time.Time
+				if m.unmuteAfter > 0 {
+					unmuteUntil = time.Now().Add(m.unmuteAfter)
+				}
+				m.muted.Store(addr.String(), unmuteUntil)
 				m.activeMu.Lock()
 				m.activeKey = ""
 				m.activeMu.Unlock()
@@ -336,8 +354,21 @@ func (m *Manager) checkTalkTimeouts() {
 				m.activeKey = ""
 			}
 			m.activeMu.Unlock()
-			// Unmute if necessary
-			m.muted.Delete(addrStr)
+			// Unmute if necessary (stop talking clears mute only if unmuteAfter==0)
+			if v, ok := m.muted.Load(addrStr); ok {
+				if until, ok2 := v.(time.Time); ok2 {
+					if until.IsZero() {
+						// muted until stop -> clear
+						m.muted.Delete(addrStr)
+					} else if time.Now().After(until) {
+						// unmute expired
+						m.muted.Delete(addrStr)
+					}
+				} else {
+					// unknown type - delete to be safe
+					m.muted.Delete(addrStr)
+				}
+			}
 			m.sendEvent(EventTalkEnd, repeater.Callsign(), addrStr, duration)
 			log.Printf("Repeater %s stopped talking (timeout after %v)", repeater.Callsign(), duration)
 		}

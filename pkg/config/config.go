@@ -27,6 +27,11 @@ type ServerConfig struct {
 	MaxConnections int           `mapstructure:"max_connections"`
 	Name           string        `mapstructure:"name"`
 	Description    string        `mapstructure:"description"`
+	// TalkMaxDuration is the maximum continuous talk duration before muting a repeater
+	TalkMaxDuration time.Duration `mapstructure:"talk_max_duration"`
+	// UnmuteAfter is the duration after which a muted repeater will be automatically unmuted
+	// If zero, muted repeaters remain muted until they stop talking
+	UnmuteAfter time.Duration `mapstructure:"unmute_after"`
 }
 
 // WebConfig holds web dashboard configuration
@@ -144,6 +149,8 @@ func setDefaults() {
 	viper.SetDefault("server.max_connections", 200)
 	viper.SetDefault("server.name", "YSF Nexus")
 	viper.SetDefault("server.description", "Go Reflector")
+	viper.SetDefault("server.talk_max_duration", "3m")
+	viper.SetDefault("server.unmute_after", "1m")
 
 	// Web defaults
 	viper.SetDefault("web.enabled", true)

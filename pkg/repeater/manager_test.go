@@ -19,7 +19,7 @@ func mustAddr(t *testing.T, s string) *net.UDPAddr {
 
 func TestSingleActiveStreamEnforcement(t *testing.T) {
     events := make(chan Event, 10)
-    m := NewManager(5*time.Second, 10, events)
+    m := NewManager(5*time.Second, 10, events, 180*time.Second, 0)
 
     addr1 := mustAddr(t, "127.0.0.1:40001")
     addr2 := mustAddr(t, "127.0.0.1:40002")
@@ -56,9 +56,7 @@ func TestSingleActiveStreamEnforcement(t *testing.T) {
 
 func TestMuteOnTalkMaxDuration(t *testing.T) {
     events := make(chan Event, 10)
-    m := NewManager(5*time.Second, 10, events)
-    // Set very small talk max duration
-    m.talkMaxDuration = 100 * time.Millisecond
+    m := NewManager(5*time.Second, 10, events, 100*time.Millisecond, 0)
 
     addr1 := mustAddr(t, "127.0.0.1:41001")
     r1, _ := m.AddRepeater("R3", addr1)

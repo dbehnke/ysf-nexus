@@ -44,6 +44,8 @@ func New(cfg *config.Config, log *logger.Logger) *Reflector {
 		cfg.Server.Timeout,
 		cfg.Server.MaxConnections,
 		eventChan,
+		cfg.Server.TalkMaxDuration,
+		cfg.Server.UnmuteAfter,
 	)
 
 	// Initialize web server
