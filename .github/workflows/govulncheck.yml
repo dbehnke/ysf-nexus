@@ -33,7 +33,6 @@ jobs:
             exit 1
           fi
           echo "$GOBIN" >> "$GITHUB_PATH"
-          govulncheck -v || true
 
       - name: Run govulncheck
         run: |
