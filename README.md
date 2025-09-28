@@ -211,6 +211,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## ✅ Implemented vs Roadmap
 
+## 📚 Project Docs
+
+- `CLAUDE.md` - detailed development notes and implementation log
+- `COPILOT.md` - concise Copilot-style project summary and checklist
+
+
 This section clarifies what is already implemented in YSF Nexus (so you know what to expect when running the binary) and what remains on the roadmap.
 
 Implemented

@@ -1,5 +1,17 @@
 # YSF Reflector Go Implementation Project (Copilot Notes)
 
+## TL;DR
+A Go-based YSF (Yaesu System Fusion) reflector with OpenSpot compatibility, a web dashboard, MQTT events, and bridge scaffolding. Production-ready core, tests and CI included. Use `config.yaml` to configure server, web, bridges and MQTT.
+
+## Quick Summary
+This project ports the original C++ YSF reflector to Go, focusing on high-concurrency, observability, and operability. Key features include:
+- UDP-based packet handling for YSFP/YSFU/YSFD/YSFS
+- OpenSpot-compatible status handling (accepts 4-byte YSFS probes)
+- Single-active-stream enforcement and talk-timeout muting
+- Embedded web dashboard with WebSocket updates
+- MQTT event publishing for external integrations
+- Bridge framework for scheduled inter-reflector connections
+
 ## Project Overview
 Convert the C++ YSF (Yaesu System Fusion) Reflector from https://github.com/nostar/DVReflectors/tree/main/YSFReflector to a modern Go application with enhanced features for amateur radio digital voice communication.
 
@@ -270,6 +282,14 @@ github.com/golang/mock       // Mock generation
 - [ ] Real-time charts for connection trends and talk activity
 
 **Current Status**: All core phases completed. YSF Nexus is production-ready!
+
+## Concise Checklist (for reviewers / operators)
+- [x] Build the binary: make build
+- [x] Run with default config: ./bin/ysf-nexus
+- [x] Run tests: make test
+- [x] Confirm OpenSpot compatibility: e2e reflector test (accepts 4-byte YSFS probe)
+- [ ] Tune talk timeouts via config (server.talk_max_duration / server.unmute_after)
+- [ ] (Optional) Enable MQTT and web dashboard in `config.yaml`
 
 ## Key Features
 
