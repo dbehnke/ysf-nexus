@@ -418,6 +418,22 @@ func (m *Manager) GetBlocklist() *Blocklist {
 	return m.blocklist
 }
 
+// IsMuted reports whether the repeater at the given address is currently muted.
+// Exported so tests and callers can check mute state without accessing internal fields.
+func (m *Manager) IsMuted(addr *net.UDPAddr) bool {
+	if v, ok := m.muted.Load(addr.String()); ok {
+		if until, ok2 := v.(time.Time); ok2 {
+			if until.IsZero() {
+				return true
+			}
+			return time.Now().Before(until)
+		}
+		// unknown type stored, treat as muted
+		return true
+	}
+	return false
+}
+
 // DumpRepeaters logs all current repeaters
 func (m *Manager) DumpRepeaters() {
 	repeaters := m.GetAllRepeaters()
