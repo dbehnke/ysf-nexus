@@ -1,0 +1,34 @@
+name: Dagger CI
+
+on:
+  push:
+    branches: [ main, 'pr/*', 'fix/*', 'pr/fix/*', 'pr/fix/openspot-status-response-clean' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  dagger:
+    name: Run Dagger pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Install Dagger CLI (optional)
+        run: |
+          if ! command -v dagger >/dev/null 2>&1; then
+            echo "Installing Dagger CLI"
+            curl -fsSL https://dl.dagger.io/dagger/install.sh | sh -s -- -b $RUNNER_TEMP
+            echo "$RUNNER_TEMP" >> $GITHUB_PATH
+          fi
+
+      - name: Run Dagger pipeline (Go SDK)
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: |
+          go run ./dagger/pipeline
