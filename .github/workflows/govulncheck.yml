@@ -37,7 +37,24 @@ jobs:
 
       - name: Run govulncheck
         run: |
-          # Run from the module root where go.mod exists
-          cd ysf-nexus
+          # Locate the module root (where go.mod lives). The repository layout
+          # may place the module at the repo root or in a subdirectory named
+          # `ysf-nexus` (or other). Detect it robustly and cd there.
+          if [ -f go.mod ]; then
+            MODROOT=.
+          elif [ -f ysf-nexus/go.mod ]; then
+            MODROOT=ysf-nexus
+          else
+            # Try to find any go.mod in the tree and use its directory
+            MODPATH=$(git ls-files | grep -m1 '^.*/go.mod' || true)
+            if [ -n "$MODPATH" ]; then
+              MODROOT=$(dirname "$MODPATH")
+            else
+              echo "could not find go.mod in repository" >&2
+              exit 1
+            fi
+          fi
+          echo "module root=$MODROOT"
+          cd "$MODROOT"
           # Fail the job if govulncheck finds vulnerabilities (it exits non-zero)
           govulncheck ./...
