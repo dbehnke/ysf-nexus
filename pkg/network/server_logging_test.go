@@ -5,6 +5,7 @@ import (
 	"context"
 	"log"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -106,5 +107,51 @@ func TestInfoTxLogging(t *testing.T) {
 	out := buf.String()
 	if !bytes.Contains([]byte(out), []byte("INFO: YSFS TX")) {
 		t.Fatalf("expected INFO TX log, got: %s", out)
+	}
+}
+
+// Test that only one INFO RX log line is emitted per packet when debug is off
+func TestSingleInfoRxLog(t *testing.T) {
+	s := NewServer("127.0.0.1", 43003)
+	s.SetDebug(false)
+
+	var buf bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&buf)
+	defer log.SetOutput(prev)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_ = s.Start(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	serverAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:43003")
+	clientAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	c, err := net.DialUDP("udp", clientAddr, serverAddr)
+	if err != nil {
+		t.Fatalf("dial failed: %v", err)
+	}
+	defer c.Close()
+
+	// Send a poll packet
+	poll := make([]byte, PollPacketSize)
+	copy(poll[0:4], []byte(PacketTypePoll))
+	copy(poll[4:14], []byte("SINGLETEST"))
+
+	if _, err := c.Write(poll); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	time.Sleep(150 * time.Millisecond)
+	cancel()
+
+	out := buf.String()
+	// Count occurrences of the INFO RX substring
+	occurrences := strings.Count(out, "INFO: YSFP RX")
+	if occurrences != 1 {
+		t.Fatalf("expected 1 INFO RX log, got %d; output:\n%s", occurrences, out)
 	}
 }

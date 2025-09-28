@@ -12,6 +12,13 @@ import (
 type Manager struct {
 	repeaters    sync.Map
 	timeout      time.Duration
+	// activeKey holds the address string of the currently active (allowed) repeater
+	activeKey    string
+	activeMu     sync.Mutex
+	// muted repeaters are those that exceeded max talk duration and are muted until they stop
+	muted        sync.Map // map[string]bool
+	// maximum allowed continuous talk duration before muting (default 180s)
+	talkMaxDuration time.Duration
 	blocklist    *Blocklist
 	events       chan<- Event
 	maxRepeaters int
@@ -56,6 +63,7 @@ func NewManager(timeout time.Duration, maxRepeaters int, eventChan chan<- Event)
 		maxRepeaters: maxRepeaters,
 		events:       eventChan,
 		blocklist:    NewBlocklist(),
+		talkMaxDuration: 180 * time.Second,
 	}
 }
 
@@ -115,6 +123,14 @@ func (m *Manager) RemoveRepeater(addr *net.UDPAddr) bool {
 		// Stop talking if active
 		if r.IsTalking() {
 			duration := r.StopTalking()
+			// Clear activeKey if this was active
+			m.activeMu.Lock()
+			if m.activeKey == addr.String() {
+				m.activeKey = ""
+			}
+			m.activeMu.Unlock()
+			// Ensure unmuted
+			m.muted.Delete(addr.String())
 			m.sendEvent(EventTalkEnd, r.Callsign(), addr.String(), duration)
 		}
 
@@ -183,13 +199,47 @@ func (m *Manager) ProcessPacket(callsign string, addr *net.UDPAddr, packetType s
 
 	// Handle talk state changes for data packets
 	if packetType == "YSFD" {
-		if !repeater.IsTalking() {
-			repeater.StartTalking()
-			m.sendEvent(EventTalkStart, callsign, addr.String(), 0)
-			log.Printf("Repeater %s started talking", callsign)
-		} else {
-			// Update talk data timestamp for ongoing transmission
+		// If this repeater is muted, ignore new talk data
+		if _, muted := m.muted.Load(addr.String()); muted {
+			// still update last seen but do not change talk state
+			return
+		}
+
+		// Enforce single active stream: only allow the first active repeater
+		m.activeMu.Lock()
+		currentActive := m.activeKey
+		if currentActive == "" {
+			// no active repeater yet
+			if !repeater.IsTalking() {
+				repeater.StartTalking()
+				m.activeKey = addr.String()
+				m.sendEvent(EventTalkStart, callsign, addr.String(), 0)
+				log.Printf("Repeater %s started talking", callsign)
+			} else {
+				// already talking
+				repeater.UpdateTalkData()
+			}
+			m.activeMu.Unlock()
+		} else if currentActive == addr.String() {
+			// This repeater is the active one; refresh talk data
+			m.activeMu.Unlock()
 			repeater.UpdateTalkData()
+			// If they've been talking too long, mute them
+			if repeater.TalkDuration() > m.talkMaxDuration {
+				// mute and stop talking
+				repeater.StopTalking()
+				m.muted.Store(addr.String(), true)
+				m.activeMu.Lock()
+				m.activeKey = ""
+				m.activeMu.Unlock()
+				m.sendEvent(EventTimeout, callsign, addr.String(), 0)
+				log.Printf("Repeater %s muted after exceeding talk max duration", callsign)
+			}
+		} else {
+			// Another repeater is currently active; ignore this talk start
+			m.activeMu.Unlock()
+			// Optionally update last talk data timestamp to show activity but do not start talking
+			return
 		}
 	}
 }
@@ -245,6 +295,14 @@ func (m *Manager) cleanupTimedOut() {
 			// Handle ongoing talk
 			if repeater.IsTalking() {
 				duration := repeater.StopTalking()
+				// If this was the active repeater, clear activeKey
+				m.activeMu.Lock()
+				if m.activeKey == addr.String() {
+					m.activeKey = ""
+				}
+				m.activeMu.Unlock()
+				// Unmute if previously muted
+				m.muted.Delete(addr.String())
 				m.sendEvent(EventTalkEnd, repeater.Callsign(), addr.String(), duration)
 			}
 
@@ -271,7 +329,16 @@ func (m *Manager) checkTalkTimeouts() {
 		repeater := value.(*Repeater)
 		if repeater.IsTalkTimedOut(talkTimeout) {
 			duration := repeater.StopTalking()
-			m.sendEvent(EventTalkEnd, repeater.Callsign(), repeater.Address().String(), duration)
+			// Clear activeKey if this was active
+			addrStr := repeater.Address().String()
+			m.activeMu.Lock()
+			if m.activeKey == addrStr {
+				m.activeKey = ""
+			}
+			m.activeMu.Unlock()
+			// Unmute if necessary
+			m.muted.Delete(addrStr)
+			m.sendEvent(EventTalkEnd, repeater.Callsign(), addrStr, duration)
 			log.Printf("Repeater %s stopped talking (timeout after %v)", repeater.Callsign(), duration)
 		}
 		return true

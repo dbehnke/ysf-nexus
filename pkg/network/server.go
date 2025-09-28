@@ -157,13 +157,9 @@ func (s *Server) handlePacket(data []byte, addr *net.UDPAddr) {
 	if isYSF {
 		if s.debug {
 			log.Printf("YSF RX %d bytes from %s:\n%s", len(data), addr, hexdumpSideBySide(data))
-		} else {
-			// minimal info-level line when debug is off: show actual packet type
-			if pktType == "" {
-				pktType = "YSF"
-			}
-			log.Printf("INFO: %s RX from %s", pktType, addr)
 		}
+		// When debug is off we will emit a single INFO log after parsing succeeds.
+		// If parsing fails, the parse error branch will emit a fallback INFO log.
 	}
 
 	// Parse packet
@@ -171,6 +167,12 @@ func (s *Server) handlePacket(data []byte, addr *net.UDPAddr) {
 	if err != nil {
 		if s.debug {
 			log.Printf("Failed to parse packet from %s: %v", addr, err)
+		} else if isYSF {
+			// Parsing failed and debug is off — emit fallback concise INFO once
+			if pktType == "" {
+				pktType = "YSF"
+			}
+			s.infoRxLog(pktType, nil, addr, len(data))
 		}
 		return
 	}
@@ -181,11 +183,8 @@ func (s *Server) handlePacket(data []byte, addr *net.UDPAddr) {
 
 	// When debug is off, emit concise INFO-level logging including packet type, size, and callsign (if present)
 	if !s.debug && isYSF {
-		info := fmt.Sprintf("INFO: %s RX from %s size=%d", packet.Type, packet.Source, len(packet.Data))
-		if packet.Callsign != "" {
-			info = fmt.Sprintf("%s callsign=%s", info, packet.Callsign)
-		}
-		log.Print(info)
+		// Use consolidated helper with parsed packet available
+		s.infoRxLog("", packet, nil, 0)
 	}
 
 	// Find handler for packet type
@@ -315,6 +314,28 @@ func (s *Server) updateMetrics(data []byte, received bool) {
 			s.metrics.BytesSent += int64(len(data))
 		}
 	}
+}
+
+// infoRxLog emits a concise INFO-level RX log line.
+// If packet is non-nil, it uses fields from the parsed packet (Type, Source, Callsign, Data).
+// Otherwise it falls back to pktType, addr and dataLen provided by the caller.
+func (s *Server) infoRxLog(pktType string, packet *Packet, addr *net.UDPAddr, dataLen int) {
+	if packet != nil {
+		// Use parsed packet information
+		info := fmt.Sprintf("INFO: %s RX from %s size=%d", packet.Type, packet.Source, len(packet.Data))
+		if packet.Callsign != "" {
+			info = fmt.Sprintf("%s callsign=%s", info, packet.Callsign)
+		}
+		log.Print(info)
+		return
+	}
+
+	// Fallback when packet is not available
+	if pktType == "" {
+		pktType = "YSF"
+	}
+	info := fmt.Sprintf("INFO: %s RX from %s size=%d", pktType, addr, dataLen)
+	log.Print(info)
 }
 
 // min returns the minimum of two integers
