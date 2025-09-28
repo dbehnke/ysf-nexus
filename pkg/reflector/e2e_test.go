@@ -34,6 +34,11 @@ func TestReflectorEndToEnd(t *testing.T) {
 	// Start reflector in background with cancellable context and ensure shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	// ensure we cancel the server and wait for it to stop when the test exits
+	defer func() {
+		cancel()
+		<-done
+	}()
 	go func() {
 		_ = r.Start(ctx) // errors will surface to test via timeouts/assertions below
 		close(done)
