@@ -19,11 +19,11 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: Install golangci-lint (action)
+      - name: Install golangci-lint (action, build from source)
         uses: golangci/golangci-lint-action@v4
         with:
-          # Let the action pick a compatible golangci-lint release
           version: latest
+          install-mode: source
 
       - name: Run golangci-lint
         run: |
