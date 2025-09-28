@@ -19,12 +19,11 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: Install golangci-lint v2 (build with runner Go)
-        run: |
-          # Build the v2 golangci-lint binary with the runner's Go to ensure the
-          # tool is built with Go >= the targeted Go version used in the repo.
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.0.0
-          echo "$GOPATH/bin" >> $GITHUB_PATH
+      - name: Install golangci-lint (action)
+        uses: golangci/golangci-lint-action@v4
+        with:
+          # Let the action pick a compatible golangci-lint release
+          version: latest
 
       - name: Run golangci-lint
         run: |
