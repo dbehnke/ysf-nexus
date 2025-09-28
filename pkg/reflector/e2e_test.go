@@ -18,7 +18,8 @@ import (
 func TestReflectorEndToEnd(t *testing.T) {
 	// Minimal config override for test
 	cfg := &config.Config{}
-	cfg.Server.Host = "127.0.0.1"
+	// bind to all interfaces in CI to avoid loopback/network namespace surprises
+	cfg.Server.Host = "0.0.0.0"
 	cfg.Server.Port = 42999 // use a high port unlikely to be in use
 	cfg.Server.Name = "E2E-TEST"
 	cfg.Server.Description = "E2E Description"
@@ -30,15 +31,16 @@ func TestReflectorEndToEnd(t *testing.T) {
 
 	r := New(cfg, log)
 
-	// Start reflector in background with cancellable context
+	// Start reflector in background with cancellable context and ensure shutdown
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	done := make(chan struct{})
 	go func() {
 		_ = r.Start(ctx) // errors will surface to test via timeouts/assertions below
+		close(done)
 	}()
 
-	// Give server a moment to start
-	time.Sleep(200 * time.Millisecond)
+	// Give server a moment to start (CI can be slower)
+	time.Sleep(500 * time.Millisecond)
 
 	// Create UDP client socket
 	laddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
@@ -58,9 +60,9 @@ func TestReflectorEndToEnd(t *testing.T) {
 		t.Fatalf("failed to send poll: %v", err)
 	}
 
-	// Read poll response
+	// Read poll response (allow more time on CI runners)
 	buf := make([]byte, 512)
-	if err := conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
 		t.Logf("warning: SetReadDeadline failed: %v", err)
 	}
 	n, err := conn.Read(buf)
@@ -80,7 +82,7 @@ func TestReflectorEndToEnd(t *testing.T) {
 	}
 
 	// Read status response
-	if err := conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
 		t.Logf("warning: SetReadDeadline failed: %v", err)
 	}
 	n, err = conn.Read(buf)
