@@ -40,12 +40,13 @@ func New(cfg *config.Config, log *logger.Logger) *Reflector {
 	r.server.SetDebug(cfg.Logging.Level == "debug")
 
 	// Initialize repeater manager
-	r.repeaterManager = repeater.NewManager(
+	r.repeaterManager = repeater.NewManagerWithLogger(
 		cfg.Server.Timeout,
 		cfg.Server.MaxConnections,
 		eventChan,
 		cfg.Server.TalkMaxDuration,
 		cfg.Server.UnmuteAfter,
+		r.logger,
 	)
 
 	// Initialize web server
@@ -325,28 +326,8 @@ func (r *Reflector) handleStatusPacket(packet *network.Packet) error {
 	return nil
 }
 
-// processEvents processes repeater events
-func (r *Reflector) processEvents(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case event := <-r.eventChan:
-			r.logger.Info("Repeater event",
-				logger.String("type", event.Type),
-				logger.String("callsign", event.Callsign),
-				logger.String("address", event.Address),
-				logger.Duration("duration", event.Duration))
-
-			// Forward event to web server via separate channel
-			// Note: The web server has its own event channel that it shares with the repeater manager
-			// This was the wrong approach - we should not consume events here
-
-			// TODO: Forward to MQTT if configured
-			// TODO: Store in database if configured
-		}
-	}
-}
+// processEvents was removed because events are forwarded/consumed elsewhere. If needed,
+// reintroduce with careful event channel ownership semantics.
 
 // logStats periodically logs statistics
 func (r *Reflector) logStats(ctx context.Context) {

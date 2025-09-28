@@ -120,7 +120,7 @@ func (l *Logger) WithFields(fields map[string]interface{}) *Logger {
 	}
 
 	return &Logger{
-		Logger: l.Logger.With(zapFields...),
+		Logger: l.With(zapFields...),
 		config: l.config,
 	}
 }
@@ -128,7 +128,7 @@ func (l *Logger) WithFields(fields map[string]interface{}) *Logger {
 // WithComponent returns a logger with a component field
 func (l *Logger) WithComponent(component string) *Logger {
 	return &Logger{
-		Logger: l.Logger.With(zap.String("component", component)),
+		Logger: l.With(zap.String("component", component)),
 		config: l.config,
 	}
 }
@@ -136,7 +136,7 @@ func (l *Logger) WithComponent(component string) *Logger {
 // WithError returns a logger with an error field
 func (l *Logger) WithError(err error) *Logger {
 	return &Logger{
-		Logger: l.Logger.With(zap.Error(err)),
+		Logger: l.With(zap.Error(err)),
 		config: l.config,
 	}
 }
@@ -162,6 +162,18 @@ func Default() *Logger {
 // FromConfig creates a logger from a configuration struct
 func FromConfig(config Config) (*Logger, error) {
 	return New(config)
+}
+
+// NewTestLogger creates a simple development logger that writes to the provided writer.
+// This is intended for tests that want to capture log output.
+func NewTestLogger(w io.Writer) *Logger {
+	encoderConfig := getEncoderConfig(true)
+	encoder := zapcore.NewConsoleEncoder(encoderConfig)
+	writeSyncer := zapcore.AddSync(w)
+	level := zapcore.DebugLevel
+	core := zapcore.NewCore(encoder, writeSyncer, level)
+	zapLogger := zap.New(core, zap.Development(), zap.AddCaller())
+	return &Logger{Logger: zapLogger, config: Config{Development: true}}
 }
 
 // Convenience methods for common field types
@@ -192,3 +204,11 @@ func Duration(key string, value time.Duration) zap.Field {
 func Error(err error) zap.Field {
 	return zap.Error(err)
 }
+
+// Any returns a generic field with an arbitrary value
+func Any(key string, value interface{}) zap.Field {
+	return zap.Any(key, value)
+}
+
+// Field is an alias for zap.Field to allow constructing field slices in callers
+type Field = zap.Field

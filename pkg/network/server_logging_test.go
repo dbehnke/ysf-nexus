@@ -3,23 +3,21 @@ package network
 import (
 	"bytes"
 	"context"
-	"log"
 	"net"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dbehnke/ysf-nexus/pkg/logger"
 )
 
 // Test that concise INFO RX logging includes type, size, and callsign when debug is off
 func TestInfoRxLogging(t *testing.T) {
 	// Setup server with debug=false and start it so handlePacket runs
-	s := NewServer("127.0.0.1", 43001)
-	s.SetDebug(false)
-	// Capture logs (restore previous writer when done)
 	var buf bytes.Buffer
-	prev := log.Writer()
-	log.SetOutput(&buf)
-	defer log.SetOutput(prev)
+	testLogger := logger.NewTestLogger(&buf)
+	s := NewServerWithLogger("127.0.0.1", 43001, testLogger)
+	s.SetDebug(false)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -37,7 +35,7 @@ func TestInfoRxLogging(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial failed: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	// Build and send poll
 	poll := make([]byte, PollPacketSize)
@@ -56,30 +54,26 @@ func TestInfoRxLogging(t *testing.T) {
 
 	// Check log contains expected INFO line
 	out := buf.String()
-	if !bytes.Contains([]byte(out), []byte("INFO: YSFP RX")) {
-		t.Fatalf("expected INFO log, got: %s", out)
+	if !strings.Contains(out, "RX") || !strings.Contains(out, PacketTypePoll) {
+		t.Fatalf("expected RX log with packet type %s, got: %s", PacketTypePoll, out)
 	}
 }
 
 // Test that TX info logging includes packet type and size when debug is off
 func TestInfoTxLogging(t *testing.T) {
 	// Setup server with debug=false
-	s := NewServer("127.0.0.1", 43002)
+	var buf bytes.Buffer
+	testLogger := logger.NewTestLogger(&buf)
+	s := NewServerWithLogger("127.0.0.1", 43002, testLogger)
 	s.SetDebug(false)
 
-	// Start listening
+	// Start listening (not required for this test's logging assertion but keep environment similar)
 	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:43002")
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		t.Fatalf("listen failed: %v", err)
 	}
-	defer conn.Close()
-
-	// Replace standard logger output (restore previous writer when done)
-	var buf bytes.Buffer
-	prev := log.Writer()
-	log.SetOutput(&buf)
-	defer log.SetOutput(prev)
+	defer func() { _ = conn.Close() }()
 
 	// Send a status response using SendPacket
 	remote, _ := net.ResolveUDPAddr("udp", "127.0.0.1:43002")
@@ -91,34 +85,32 @@ func TestInfoTxLogging(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial failed: %v", err)
 	}
-	defer dialConn.Close()
+	defer func() { _ = dialConn.Close() }()
 
 	// Start a goroutine to read the packet that will be sent
 	go func() {
 		buf3 := make([]byte, 128)
-		dialConn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		if err := dialConn.SetReadDeadline(time.Now().Add(500 * time.Millisecond)); err != nil {
+			t.Logf("warning: SetReadDeadline failed: %v", err)
+		}
 		_, _ = conn.Read(buf3)
 	}()
 
-	// We can't call s.SendPacket because s.conn is nil; instead simulate TX log path by calling the logging branch directly
-	// Emit log like SendPacket would
-	log.Printf("INFO: %s TX to %s size=%d", PacketTypeStatus, remote, len(payload))
+	// Simulate the TX logging that SendPacket would emit
+	testLogger.Info("TX", logger.String("type", PacketTypeStatus), logger.String("to", remote.String()), logger.Int("size", len(payload)))
 
 	out := buf.String()
-	if !bytes.Contains([]byte(out), []byte("INFO: YSFS TX")) {
-		t.Fatalf("expected INFO TX log, got: %s", out)
+	if !strings.Contains(out, "TX") || !strings.Contains(out, PacketTypeStatus) {
+		t.Fatalf("expected TX log with packet type %s, got: %s", PacketTypeStatus, out)
 	}
 }
 
 // Test that only one INFO RX log line is emitted per packet when debug is off
 func TestSingleInfoRxLog(t *testing.T) {
-	s := NewServer("127.0.0.1", 43003)
-	s.SetDebug(false)
-
 	var buf bytes.Buffer
-	prev := log.Writer()
-	log.SetOutput(&buf)
-	defer log.SetOutput(prev)
+	testLogger := logger.NewTestLogger(&buf)
+	s := NewServerWithLogger("127.0.0.1", 43003, testLogger)
+	s.SetDebug(false)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -134,7 +126,7 @@ func TestSingleInfoRxLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial failed: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	// Send a poll packet
 	poll := make([]byte, PollPacketSize)
@@ -149,8 +141,8 @@ func TestSingleInfoRxLog(t *testing.T) {
 	cancel()
 
 	out := buf.String()
-	// Count occurrences of the INFO RX substring
-	occurrences := strings.Count(out, "INFO: YSFP RX")
+	// Count occurrences of the packet type substring
+	occurrences := strings.Count(out, PacketTypePoll)
 	if occurrences != 1 {
 		t.Fatalf("expected 1 INFO RX log, got %d; output:\n%s", occurrences, out)
 	}

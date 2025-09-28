@@ -18,7 +18,7 @@ func TestPollAndStatusResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to listen udp: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Use the local address as destination
 	remoteAddr := conn.LocalAddr().(*net.UDPAddr)
@@ -33,7 +33,7 @@ func TestPollAndStatusResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to dial udp: %v", err)
 	}
-	defer sock.Close()
+	defer func() { _ = sock.Close() }()
 
 	// Send poll
 	if _, err := sock.Write(poll); err != nil {
@@ -41,7 +41,9 @@ func TestPollAndStatusResponse(t *testing.T) {
 	}
 
 	// Set read deadline
-	sock.SetReadDeadline(time.Now().Add(1 * time.Second))
+	if err := sock.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		t.Logf("warning: SetReadDeadline failed: %v", err)
+	}
 
 	// Read should fail because there's no server logic in this test package to reply
 	buf := make([]byte, 512)
@@ -83,7 +85,7 @@ func TestPollAndStatusResponse(t *testing.T) {
 	// Hash should be 5 bytes ASCII digits
 	for i := 4; i < 9; i++ {
 		b := status[i]
-		if !(b >= '0' && b <= '9') {
+		if b < '0' || b > '9' {
 			t.Fatalf("status hash byte %d not digit: %v", i, b)
 		}
 	}

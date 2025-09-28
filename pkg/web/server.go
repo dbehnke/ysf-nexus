@@ -66,6 +66,7 @@ type WebSocketHub struct {
 	register   chan *websocket.Conn
 	unregister chan *websocket.Conn
 	mu         sync.RWMutex
+	logger     *logger.Logger
 }
 
 // WebSocketMessage represents a WebSocket message
@@ -87,7 +88,9 @@ func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager
 		broadcast:  make(chan []byte, 256),
 		register:   make(chan *websocket.Conn),
 		unregister: make(chan *websocket.Conn),
-	}
+		}
+	// Assign logger to hub for internal logging
+	hub.logger = log.WithComponent("web.hub")
 
 	return &Server{
 		config:          cfg,
@@ -250,9 +253,14 @@ func (s *Server) setupStaticRoutes(router *mux.Router) {
 
 		// Fallback to index.html for SPA routing
 		if indexFile, err := distFS.Open("index.html"); err == nil {
-			defer indexFile.Close()
+			if err := indexFile.Close(); err != nil {
+				s.logger.Warn("indexFile.Close failed", logger.Error(err))
+			}
 			w.Header().Set("Content-Type", "text/html")
-			io.Copy(w, indexFile)
+			if _, err := io.Copy(w, indexFile); err != nil {
+				// Client disconnects are common; log at debug level
+				s.logger.Debug("io.Copy failed while serving index.html", logger.Error(err))
+			}
 		} else {
 			http.Error(w, "Frontend not available", http.StatusNotFound)
 		}
@@ -338,7 +346,11 @@ func (hub *WebSocketHub) run() {
 			hub.mu.Lock()
 			if _, ok := hub.clients[client]; ok {
 				delete(hub.clients, client)
-				client.Close()
+				if err := client.Close(); err != nil {
+					if hub.logger != nil {
+						hub.logger.Warn("failed to close websocket client", logger.Error(err))
+					}
+				}
 			}
 			hub.mu.Unlock()
 
@@ -347,7 +359,11 @@ func (hub *WebSocketHub) run() {
 			for client := range hub.clients {
 				if err := client.WriteMessage(websocket.TextMessage, message); err != nil {
 					delete(hub.clients, client)
-					client.Close()
+					if err := client.Close(); err != nil {
+						if hub.logger != nil {
+							hub.logger.Warn("failed to close websocket client", logger.Error(err))
+						}
+					}
 				}
 			}
 			hub.mu.RUnlock()
@@ -495,14 +511,18 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		"bytesSent":        stats.TotalBytesTransmitted,
 	}
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }
 
 func (s *Server) handleRepeaters(w http.ResponseWriter, r *http.Request) {
 	stats := s.repeaterManager.GetStats()
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"repeaters": stats.Repeaters,
-	})
+	}); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }
 
 func (s *Server) handleTalkLogs(w http.ResponseWriter, r *http.Request) {
@@ -522,9 +542,11 @@ func (s *Server) handleTalkLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.RUnlock()
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"logs": logs,
-	})
+	}); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }
 
 func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
@@ -537,14 +559,18 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 		"timeout":        s.config.Server.Timeout.String(),
 	}
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status": "healthy",
 		"time":   time.Now().Format(time.RFC3339),
-	})
+	}); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }
 
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -613,12 +639,16 @@ func (s *Server) handleGetServerConfig(w http.ResponseWriter, r *http.Request) {
 		"maxConnections": s.config.Server.MaxConnections,
 		"timeoutMinutes": int(s.config.Server.Timeout.Minutes()),
 	}
-	json.NewEncoder(w).Encode(config)
+	if err := json.NewEncoder(w).Encode(config); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }
 
 func (s *Server) handleUpdateServerConfig(w http.ResponseWriter, r *http.Request) {
 	// This would update the server configuration
-	json.NewEncoder(w).Encode(map[string]string{"status": "not implemented"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "not implemented"}); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }
 
 func (s *Server) handleGetBlocklistConfig(w http.ResponseWriter, r *http.Request) {
@@ -626,12 +656,16 @@ func (s *Server) handleGetBlocklistConfig(w http.ResponseWriter, r *http.Request
 		"enabled":   s.config.Blocklist.Enabled,
 		"callsigns": s.config.Blocklist.Callsigns,
 	}
-	json.NewEncoder(w).Encode(config)
+	if err := json.NewEncoder(w).Encode(config); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }
 
 func (s *Server) handleUpdateBlocklistConfig(w http.ResponseWriter, r *http.Request) {
 	// This would update the blocklist configuration
-	json.NewEncoder(w).Encode(map[string]string{"status": "not implemented"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "not implemented"}); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }
 
 func (s *Server) handleGetLoggingConfig(w http.ResponseWriter, r *http.Request) {
@@ -641,12 +675,16 @@ func (s *Server) handleGetLoggingConfig(w http.ResponseWriter, r *http.Request) 
 		"file":    s.config.Logging.File,
 		"maxSize": s.config.Logging.MaxSize,
 	}
-	json.NewEncoder(w).Encode(config)
+	if err := json.NewEncoder(w).Encode(config); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }
 
 func (s *Server) handleUpdateLoggingConfig(w http.ResponseWriter, r *http.Request) {
 	// This would update the logging configuration
-	json.NewEncoder(w).Encode(map[string]string{"status": "not implemented"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "not implemented"}); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }
 
 // Authentication handlers
@@ -705,11 +743,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 	})
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"token":   token,
 		"expires": expiry.Format(time.RFC3339),
-	})
+	}); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -739,7 +779,9 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	json.NewEncoder(w).Encode(map[string]string{"success": "logged out"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"success": "logged out"}); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }
 
 func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
@@ -774,5 +816,7 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 		response["authenticated"] = true
 	}
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
 }

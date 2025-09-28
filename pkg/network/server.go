@@ -3,11 +3,12 @@ package network
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dbehnke/ysf-nexus/pkg/logger"
 )
 
 // PacketHandler handles incoming packets
@@ -23,6 +24,7 @@ type Server struct {
 	debug    bool
 	mu       sync.RWMutex
 	running  bool
+	logger   *logger.Logger
 }
 
 // Metrics holds server metrics
@@ -37,8 +39,14 @@ type Metrics struct {
 }
 
 // NewServer creates a new UDP server
+// NewServer creates a new UDP server with a default logger.
 func NewServer(host string, port int) *Server {
-	return &Server{
+	return NewServerWithLogger(host, port, logger.Default())
+}
+
+// NewServerWithLogger creates a new UDP server and attaches the provided logger.
+func NewServerWithLogger(host string, port int, log *logger.Logger) *Server {
+	s := &Server{
 		host:     host,
 		port:     port,
 		handlers: make(map[string]PacketHandler),
@@ -47,7 +55,9 @@ func NewServer(host string, port int) *Server {
 			PacketsSent:     make(map[string]int64),
 			Uptime:          time.Now(),
 		},
+		logger: log.WithComponent("network"),
 	}
+	return s
 }
 
 // RegisterHandler registers a packet handler for a specific packet type
@@ -78,7 +88,9 @@ func (s *Server) Start(ctx context.Context) error {
 	s.running = true
 	s.mu.Unlock()
 
-	log.Printf("YSF server listening on %s:%d", s.host, s.port)
+	if s.logger != nil {
+		s.logger.Info("YSF server listening", logger.String("host", s.host), logger.Int("port", s.port))
+	}
 
 	// Start packet processing goroutine
 	go s.processPackets(ctx)
@@ -117,15 +129,19 @@ func (s *Server) processPackets(ctx context.Context) {
 			return
 		default:
 			// Set read timeout to allow periodic context checking
-			s.conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+			if err := s.conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+				if s.isRunning() && s.logger != nil {
+					s.logger.Warn("SetReadDeadline failed", logger.Error(err))
+				}
+			}
 
 			n, addr, err := s.conn.ReadFromUDP(buffer)
 			if err != nil {
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 					continue // Timeout is expected, continue
 				}
-				if s.isRunning() {
-					log.Printf("Error reading UDP packet: %v", err)
+				if s.isRunning() && s.logger != nil {
+					s.logger.Error("Error reading UDP packet", logger.Error(err))
 				}
 				continue
 			}
@@ -156,7 +172,12 @@ func (s *Server) handlePacket(data []byte, addr *net.UDPAddr) {
 	isYSF := len(data) >= 3 && string(data[:3]) == "YSF"
 	if isYSF {
 		if s.debug {
-			log.Printf("YSF RX %d bytes from %s:\n%s", len(data), addr, hexdumpSideBySide(data))
+			if s.logger != nil {
+				s.logger.Debug("YSF RX hexdump",
+					logger.String("from", addr.String()),
+					logger.Int("size", len(data)),
+					logger.String("hexdump", hexdumpSideBySide(data)))
+			}
 		}
 		// When debug is off we will emit a single INFO log after parsing succeeds.
 		// If parsing fails, the parse error branch will emit a fallback INFO log.
@@ -166,7 +187,9 @@ func (s *Server) handlePacket(data []byte, addr *net.UDPAddr) {
 	packet, err := ParsePacket(data, addr)
 	if err != nil {
 		if s.debug {
-			log.Printf("Failed to parse packet from %s: %v", addr, err)
+			if s.logger != nil {
+				s.logger.Debug("Failed to parse packet", logger.String("from", addr.String()), logger.Error(err))
+			}
 		} else if isYSF {
 			// Parsing failed and debug is off — emit fallback concise INFO once
 			if pktType == "" {
@@ -178,7 +201,9 @@ func (s *Server) handlePacket(data []byte, addr *net.UDPAddr) {
 	}
 
 	if s.debug {
-		log.Printf("Parsed packet: %s", packet.String())
+		if s.logger != nil {
+			s.logger.Debug("Parsed packet", logger.String("packet", packet.String()))
+		}
 	}
 
 	// When debug is off, emit concise INFO-level logging including packet type, size, and callsign (if present)
@@ -193,15 +218,17 @@ func (s *Server) handlePacket(data []byte, addr *net.UDPAddr) {
 	s.mu.RUnlock()
 
 	if !exists {
-		if s.debug {
-			log.Printf("No handler for packet type: %s", packet.Type)
+		if s.debug && s.logger != nil {
+			s.logger.Debug("No handler for packet type", logger.String("type", packet.Type))
 		}
 		return
 	}
 
 	// Call handler
 	if err := handler(packet); err != nil {
-		log.Printf("Handler error for packet type %s: %v", packet.Type, err)
+		if s.logger != nil {
+			s.logger.Error("Handler error for packet type", logger.String("type", packet.Type), logger.Error(err))
+		}
 	}
 }
 
@@ -229,12 +256,23 @@ func (s *Server) SendPacket(data []byte, addr *net.UDPAddr) error {
 		}
 
 		if s.debug {
-			log.Printf("YSF TX %d bytes to %s:\n%s", n, addr, hexdumpSideBySide(data))
-		} else {
-			log.Printf("INFO: %s TX to %s size=%d", pktType, addr, n)
+			if s.logger != nil {
+				s.logger.Debug("YSF TX hexdump",
+					logger.String("to", addr.String()),
+					logger.Int("size", n),
+					logger.String("hexdump", hexdumpSideBySide(data)))
+			}
+		} else if s.logger != nil {
+			s.logger.Info("TX",
+				logger.String("type", pktType),
+				logger.String("to", addr.String()),
+				logger.Int("size", n))
 		}
-	} else if s.debug {
-		log.Printf("Sent %d bytes to %s: %x", n, addr, data[:min(len(data), 16)])
+	} else if s.debug && s.logger != nil {
+		s.logger.Debug("Sent bytes",
+			logger.String("to", addr.String()),
+			logger.Int("size", n),
+			logger.String("preview", fmt.Sprintf("%x", data[:min(len(data), 16)])))
 	}
 
 	return nil
@@ -253,14 +291,16 @@ func (s *Server) BroadcastData(data []byte, addresses []*net.UDPAddr, exclude *n
 		}
 
 		if err := s.SendPacket(data, addr); err != nil {
-			log.Printf("Failed to send packet to %s: %v", addr, err)
+			if s.logger != nil {
+				s.logger.Error("Failed to send packet", logger.String("to", addr.String()), logger.Error(err))
+			}
 			continue
 		}
 		sent++
 	}
 
-	if s.debug {
-		log.Printf("Broadcasted to %d addresses (excluded %v)", sent, exclude)
+	if s.debug && s.logger != nil {
+		s.logger.Debug("Broadcast completed", logger.Int("sent", sent))
 	}
 
 	return nil
@@ -322,11 +362,17 @@ func (s *Server) updateMetrics(data []byte, received bool) {
 func (s *Server) infoRxLog(pktType string, packet *Packet, addr *net.UDPAddr, dataLen int) {
 	if packet != nil {
 		// Use parsed packet information
-		info := fmt.Sprintf("INFO: %s RX from %s size=%d", packet.Type, packet.Source, len(packet.Data))
-		if packet.Callsign != "" {
-			info = fmt.Sprintf("%s callsign=%s", info, packet.Callsign)
+		if s.logger != nil {
+			fields := []logger.Field{
+				logger.String("type", packet.Type),
+				logger.String("source", packet.Source.String()),
+				logger.Int("size", len(packet.Data)),
+			}
+			if packet.Callsign != "" {
+				fields = append(fields, logger.String("callsign", packet.Callsign))
+			}
+			s.logger.Info("RX", fields...)
 		}
-		log.Print(info)
 		return
 	}
 
@@ -334,8 +380,12 @@ func (s *Server) infoRxLog(pktType string, packet *Packet, addr *net.UDPAddr, da
 	if pktType == "" {
 		pktType = "YSF"
 	}
-	info := fmt.Sprintf("INFO: %s RX from %s size=%d", pktType, addr, dataLen)
-	log.Print(info)
+	if s.logger != nil {
+		s.logger.Info("RX",
+			logger.String("type", pktType),
+			logger.String("from", addr.String()),
+			logger.Int("size", dataLen))
+	}
 }
 
 // min returns the minimum of two integers

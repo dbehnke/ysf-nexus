@@ -3,16 +3,19 @@ package network
 import (
 	"bytes"
 	"context"
-	"log"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/dbehnke/ysf-nexus/pkg/logger"
 )
 
 // Test that when debug=true the hexdump is printed for incoming YSF packets
 func TestDebugHexdumpRx(t *testing.T) {
 	// Setup server with debug=true and start
-	s := NewServer("127.0.0.1", 43003)
+	var buf bytes.Buffer
+	testLogger := logger.NewTestLogger(&buf)
+	s := NewServerWithLogger("127.0.0.1", 43003, testLogger)
 	s.SetDebug(true)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -24,11 +27,7 @@ func TestDebugHexdumpRx(t *testing.T) {
 	// Give server time to start
 	time.Sleep(50 * time.Millisecond)
 
-	// Capture logs (restore previous writer when done)
-	var buf bytes.Buffer
-	prev := log.Writer()
-	log.SetOutput(&buf)
-	defer log.SetOutput(prev)
+	// logs are captured via testLogger writing to buf
 
 	// Dial and send a YSFD (data) like packet
 	serverAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:43003")
@@ -37,7 +36,7 @@ func TestDebugHexdumpRx(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial failed: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	payload := make([]byte, DataPacketSize)
 	copy(payload[0:4], []byte(PacketTypeData))

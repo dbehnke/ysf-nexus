@@ -12,7 +12,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tempFile.Name())
+	defer func() { _ = os.Remove(tempFile.Name()) }()
 
 	// Write minimal config
 	_, err = tempFile.WriteString(`
@@ -22,7 +22,9 @@ server:
 	if err != nil {
 		t.Fatalf("Failed to write temp file: %v", err)
 	}
-	tempFile.Close()
+	if err := tempFile.Close(); err != nil {
+		t.Logf("warning: tempFile.Close failed: %v", err)
+	}
 
 	// Load config
 	cfg, err := Load(tempFile.Name())
@@ -70,7 +72,7 @@ func TestLoadFullConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tempFile.Name())
+	defer func() { _ = os.Remove(tempFile.Name()) }()
 
 	// Write full config
 	configContent := `
@@ -107,7 +109,9 @@ logging:
 	if err != nil {
 		t.Fatalf("Failed to write temp file: %v", err)
 	}
-	tempFile.Close()
+	if err := tempFile.Close(); err != nil {
+		t.Logf("warning: tempFile.Close failed: %v", err)
+	}
 
 	// Load config
 	cfg, err := Load(tempFile.Name())
@@ -246,13 +250,15 @@ logging:
 			if err != nil {
 				t.Fatalf("Failed to create temp file: %v", err)
 			}
-			defer os.Remove(tempFile.Name())
+						defer func() { _ = os.Remove(tempFile.Name()) }()
 
 			_, err = tempFile.WriteString(tt.config)
 			if err != nil {
 				t.Fatalf("Failed to write temp file: %v", err)
 			}
-			tempFile.Close()
+						if err := tempFile.Close(); err != nil {
+							t.Logf("warning: tempFile.Close failed: %v", err)
+						}
 
 			// Load and validate
 			_, err = Load(tempFile.Name())

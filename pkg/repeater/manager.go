@@ -2,10 +2,11 @@ package repeater
 
 import (
 	"context"
-	"log"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/dbehnke/ysf-nexus/pkg/logger"
 )
 
 // Manager manages multiple YSF repeaters
@@ -26,6 +27,7 @@ type Manager struct {
 	maxRepeaters int
 	mu           sync.RWMutex
 	metrics      ManagerMetrics
+	logger       *logger.Logger
 }
 
 // ManagerMetrics holds manager statistics
@@ -59,7 +61,13 @@ const (
 )
 
 // NewManager creates a new repeater manager
+// NewManager creates a new manager with a default logger.
 func NewManager(timeout time.Duration, maxRepeaters int, eventChan chan<- Event, talkMaxDuration, unmuteAfter time.Duration) *Manager {
+	return NewManagerWithLogger(timeout, maxRepeaters, eventChan, talkMaxDuration, unmuteAfter, logger.Default())
+}
+
+// NewManagerWithLogger creates a new manager and attaches the provided logger.
+func NewManagerWithLogger(timeout time.Duration, maxRepeaters int, eventChan chan<- Event, talkMaxDuration, unmuteAfter time.Duration, log *logger.Logger) *Manager {
 	return &Manager{
 		timeout:         timeout,
 		maxRepeaters:    maxRepeaters,
@@ -67,6 +75,7 @@ func NewManager(timeout time.Duration, maxRepeaters int, eventChan chan<- Event,
 		blocklist:       NewBlocklist(),
 		talkMaxDuration: talkMaxDuration,
 		unmuteAfter:     unmuteAfter,
+		logger:          log.WithComponent("manager"),
 	}
 }
 
@@ -90,7 +99,10 @@ func (m *Manager) AddRepeater(callsign string, addr *net.UDPAddr) (*Repeater, bo
 	// Check max connections
 	count := m.Count()
 	if count >= m.maxRepeaters {
-		log.Printf("Maximum repeater limit reached (%d), rejecting %s", m.maxRepeaters, callsign)
+		if m.logger != nil {
+			m.logger.Warn("Maximum repeater limit reached, rejecting",
+				logger.Int("limit", m.maxRepeaters), logger.String("callsign", callsign))
+		}
 		return nil, false
 	}
 
@@ -104,7 +116,9 @@ func (m *Manager) AddRepeater(callsign string, addr *net.UDPAddr) (*Repeater, bo
 	m.mu.Unlock()
 
 	m.sendEvent(EventConnect, callsign, addr.String(), 0)
-	log.Printf("New repeater connected: %s from %s", callsign, addr)
+	if m.logger != nil {
+		m.logger.Info("New repeater connected", logger.String("callsign", callsign), logger.String("from", addr.String()))
+	}
 
 	return repeater, true // New repeater
 }
@@ -142,8 +156,9 @@ func (m *Manager) RemoveRepeater(addr *net.UDPAddr) bool {
 		m.mu.Unlock()
 
 		m.sendEvent(EventDisconnect, r.Callsign(), addr.String(), 0)
-		log.Printf("Repeater disconnected: %s from %s (uptime: %v)",
-			r.Callsign(), addr, r.Uptime())
+		if m.logger != nil {
+			m.logger.Info("Repeater disconnected", logger.String("callsign", r.Callsign()), logger.String("from", addr.String()), logger.String("uptime", r.Uptime().String()))
+		}
 
 		return true
 	}
@@ -227,7 +242,9 @@ func (m *Manager) ProcessPacket(callsign string, addr *net.UDPAddr, packetType s
 				repeater.StartTalking()
 				m.activeKey = addr.String()
 				m.sendEvent(EventTalkStart, callsign, addr.String(), 0)
-				log.Printf("Repeater %s started talking", callsign)
+				if m.logger != nil {
+					m.logger.Info("Repeater started talking", logger.String("callsign", callsign))
+				}
 			} else {
 				// already talking
 				repeater.UpdateTalkData()
@@ -251,7 +268,9 @@ func (m *Manager) ProcessPacket(callsign string, addr *net.UDPAddr, packetType s
 				m.activeKey = ""
 				m.activeMu.Unlock()
 				m.sendEvent(EventTimeout, callsign, addr.String(), 0)
-				log.Printf("Repeater %s muted after exceeding talk max duration", callsign)
+				if m.logger != nil {
+					m.logger.Warn("Repeater muted after exceeding talk max duration", logger.String("callsign", callsign))
+				}
 			}
 		} else {
 			// Another repeater is currently active; ignore this talk start
@@ -333,8 +352,8 @@ func (m *Manager) cleanupTimedOut() {
 		m.RemoveRepeater(addr)
 	}
 
-	if len(toRemove) > 0 {
-		log.Printf("Cleaned up %d timed-out repeaters", len(toRemove))
+	if len(toRemove) > 0 && m.logger != nil {
+		m.logger.Info("Cleaned up timed-out repeaters", logger.Int("count", len(toRemove)))
 	}
 }
 
@@ -369,8 +388,10 @@ func (m *Manager) checkTalkTimeouts() {
 					m.muted.Delete(addrStr)
 				}
 			}
-			m.sendEvent(EventTalkEnd, repeater.Callsign(), addrStr, duration)
-			log.Printf("Repeater %s stopped talking (timeout after %v)", repeater.Callsign(), duration)
+				m.sendEvent(EventTalkEnd, repeater.Callsign(), addrStr, duration)
+				if m.logger != nil {
+					m.logger.Info("Repeater stopped talking (timeout)", logger.String("callsign", repeater.Callsign()), logger.Duration("duration", duration))
+				}
 		}
 		return true
 	})
@@ -437,13 +458,19 @@ func (m *Manager) IsMuted(addr *net.UDPAddr) bool {
 // DumpRepeaters logs all current repeaters
 func (m *Manager) DumpRepeaters() {
 	repeaters := m.GetAllRepeaters()
-	log.Printf("=== Repeater Dump ===")
-	log.Printf("Active repeaters: %d", len(repeaters))
+	if m.logger != nil {
+		m.logger.Info("=== Repeater Dump ===")
+		m.logger.Info("Active repeaters", logger.Int("count", len(repeaters)))
+	}
 
 	for _, repeater := range repeaters {
-		log.Printf("  %s", repeater.String())
+		if m.logger != nil {
+			m.logger.Info(repeater.String())
+		}
 	}
-	log.Printf("=== End Dump ===")
+	if m.logger != nil {
+		m.logger.Info("=== End Dump ===")
+	}
 }
 
 // sendEvent sends an event to the event channel
@@ -462,8 +489,10 @@ func (m *Manager) sendEvent(eventType, callsign, address string, duration time.D
 
 	select {
 	case m.events <- event:
-	default:
-		// Don't block if event channel is full
-		log.Printf("Event channel full, dropping event: %+v", event)
+		default:
+			// Don't block if event channel is full
+			if m.logger != nil {
+				m.logger.Warn("Event channel full, dropping event", logger.Any("event", event))
+			}
 	}
 }

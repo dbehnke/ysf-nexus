@@ -47,7 +47,7 @@ func TestReflectorEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to dial UDP: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send YSFP poll (14 bytes) - construct a simple poll with callsign 'TEST'
 	poll := make([]byte, network.PollPacketSize)
@@ -60,7 +60,9 @@ func TestReflectorEndToEnd(t *testing.T) {
 
 	// Read poll response
 	buf := make([]byte, 512)
-	conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+	if err := conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		t.Logf("warning: SetReadDeadline failed: %v", err)
+	}
 	n, err := conn.Read(buf)
 	if err != nil {
 		t.Fatalf("failed to read poll response: %v", err)
@@ -78,7 +80,9 @@ func TestReflectorEndToEnd(t *testing.T) {
 	}
 
 	// Read status response
-	conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+	if err := conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		t.Logf("warning: SetReadDeadline failed: %v", err)
+	}
 	n, err = conn.Read(buf)
 	if err != nil {
 		t.Fatalf("failed to read status response: %v", err)

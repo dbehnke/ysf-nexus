@@ -283,6 +283,10 @@ github.com/golang/mock       // Mock generation
 
 **Current Status**: All core phases completed. YSF Nexus is production-ready!
 
+## Linting & Code Quality
+
+We use `golangci-lint` as part of CI to ensure code quality and consistency. A GitHub Actions workflow runs `golangci-lint` on PRs and pushes. Please run `golangci-lint run ./...` locally and resolve any findings before pushing changes.
+
 ## Concise Checklist (for reviewers / operators)
 - [x] Build the binary: make build
 - [x] Run with default config: ./bin/ysf-nexus

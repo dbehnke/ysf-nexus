@@ -43,9 +43,7 @@ func TestSingleActiveStreamEnforcement(t *testing.T) {
     _ = r1.StopTalking()
 
     // For unit test determinism, clear activeKey to simulate manager recognizing the stop
-    m.activeMu.Lock()
-    m.activeKey = ""
-    m.activeMu.Unlock()
+    m.ClearActive()
 
     // Now r2 should be able to start
     m.ProcessPacket(r2.Callsign(), addr2, "YSFD", 50)
@@ -78,7 +76,7 @@ func TestMuteOnTalkMaxDuration(t *testing.T) {
     }
 
     // Muted entry should exist
-    if _, ok := m.muted.Load(addr1.String()); !ok {
+    if !m.IsMuted(addr1) {
         t.Fatalf("expected r1 to be muted after exceeding talkMaxDuration")
     }
 
