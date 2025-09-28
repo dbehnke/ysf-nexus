@@ -209,6 +209,30 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Amateur radio community for YSF protocol development
 - Go community for excellent networking libraries
 
+## ✅ Implemented vs Roadmap
+
+This section clarifies what is already implemented in YSF Nexus (so you know what to expect when running the binary) and what remains on the roadmap.
+
+Implemented
+- Core YSF reflector: packet parsing (YSFP/YSFU/YSFD/YSFS) and UDP server
+- Repeater management with thread-safe structures and timeouts
+- Poll/status responses compatible with OpenSpot and other clients (includes 4-byte YSFS probe handling)
+- Single-active-stream enforcement and talk-timeout muting (configurable)
+- Config file support with sensible defaults and Viper-based loading
+- Web dashboard (static UI + WebSocket updates) and embedded static assets for CI
+- MQTT integration for real-time events (connect/disconnect/talk)
+- Unit tests, end-to-end reflector test, and CI workflow
+
+Roadmap (planned / optional)
+- Live configurability via web dashboard (tune talk timeouts from UI)
+- CLI flags to override config file values at runtime
+- Persistent event store (DB) for long-term talk logs and analytics
+- Advanced bridge strategies (failover, dynamic schedules)
+- UI improvements: per-repeater controls, manual unmute button, and visual indicators for muted repeaters
+- Performance tuning for very large deployments (1k+ repeaters)
+
+If you'd like any roadmap items prioritized for the upcoming release, tell me which ones and I can prepare an implementation plan and tests.
+
 ---
 
 **73!** 📻
