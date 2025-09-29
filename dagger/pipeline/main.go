@@ -1,64 +1,44 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
-
-	dagger "github.com/dagger/dagger/go/dagger"
+	"os/exec"
+	"path/filepath"
 )
 
+// This runner intentionally avoids importing the Dagger Go SDK due to
+// module path mismatches on the runner. Instead it runs the pipeline steps
+// inside a reproducible container using docker. The CI workflow already
+// exposes the docker socket to this process.
 func main() {
-	ctx := context.Background()
-	c, err := dagger.Connect(ctx, dagger.WithLogOutput(os.Stdout))
+	// When executed from dagger/pipeline (the workflow cd's there), the
+	// repository root is two levels up.
+	cwd, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "dagger connect: %v\n", err)
-		os.Exit(1)
-	}
-	defer c.Close()
-
-	// Use the repository root as the build context. When this program is
-	// executed from the dagger/pipeline directory (as the CI workflow does),
-	// the repo root is two levels up.
-	src := c.Host().Directory("../..")
-
-	// Base image with Go installed
-	golang := c.Container().From("golang:1.25")
-
-	// Create container for running go test
-	test := golang.WithMountedDirectory("/src", src).
-		WithWorkdir("/src/ysf-nexus").
-		WithExec([]string{"/bin/sh", "-c", "go test ./..."})
-
-	// Run tests
-	_, err = test.ExitCode(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "tests failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to get cwd: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Install golangci-lint in the container and run it
-	lint := golang.WithMountedDirectory("/src", src).
-		WithWorkdir("/src/ysf-nexus").
-		WithExec([]string{"/bin/sh", "-c", "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest && $GOBIN/golangci-lint run ./..."})
+	repoRoot := filepath.Clean(filepath.Join(cwd, "..", ".."))
 
-	_, err = lint.ExitCode(ctx)
+	// Build the docker run command to execute tests, lint, and govulncheck
+	// inside golang:1.25. Use an explicit absolute path for the mount.
+	cmd := fmt.Sprintf(
+		"docker run --rm -v %s:/src -w /src/ysf-nexus golang:1.25 /bin/sh -c '%s'",
+		repoRoot,
+		// Command executed inside the container
+		"set -e; go test ./...; go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest; $GOBIN/golangci-lint run ./...; go install golang.org/x/vuln/cmd/govulncheck@latest; $GOBIN/govulncheck ./...",
+	)
+
+	fmt.Println("running:", cmd)
+
+	out, err := exec.Command("sh", "-c", cmd).CombinedOutput()
+	fmt.Print(string(out))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "golangci-lint failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "pipeline failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Install govulncheck and run it
-	vuln := golang.WithMountedDirectory("/src", src).
-		WithWorkdir("/src/ysf-nexus").
-		WithExec([]string{"/bin/sh", "-c", "go install golang.org/x/vuln/cmd/govulncheck@latest && $GOBIN/govulncheck ./..."})
-
-	// govulncheck exits non-zero when vulnerabilities are found, which will cause the pipeline to fail
-	_, err = vuln.ExitCode(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "govulncheck failed: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("dagger pipeline completed: tests, lint, and vulncheck passed")
+	fmt.Println("pipeline completed: tests, lint, and vulncheck passed")
 }
