@@ -8,7 +8,7 @@ on:
 
 jobs:
   dagger:
-    name: Run Dagger pipeline
+    name: Run Dagger CI Pipeline
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -27,11 +27,6 @@ jobs:
             echo "$RUNNER_TEMP" >> $GITHUB_PATH
           fi
 
-      - name: Run Dagger pipeline (Go SDK)
-        env:
-          DOCKER_HOST: unix:///var/run/docker.sock
+      - name: Run Dagger CI Pipeline
         run: |
-          cd dagger/pipeline
-          # ensure module checksums are populated in CI (avoid missing go.sum entries)
-          go mod tidy
-          go run .
+          dagger call ci --source=.
