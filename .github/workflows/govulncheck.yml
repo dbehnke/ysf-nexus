@@ -1,10 +1,7 @@
 name: govulncheck
 
 on:
-  push:
-    branches: [ main, 'pr/*', 'fix/*', 'pr/fix/*', 'pr/fix/openspot-status-response-clean' ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch: {}
 
 jobs:
   govulncheck:
