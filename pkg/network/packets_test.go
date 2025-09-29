@@ -10,9 +10,9 @@ func TestParsePacket(t *testing.T) {
 	addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42000}
 
 	tests := []struct {
-		name      string
-		data      []byte
-		expectErr bool
+		name       string
+		data       []byte
+		expectErr  bool
 		expectType string
 	}{
 		{
@@ -22,19 +22,19 @@ func TestParsePacket(t *testing.T) {
 			expectType: PacketTypePoll,
 		},
 		{
-			name:       "Too small packet",
-			data:       []byte("YSF"),
-			expectErr:  true,
+			name:      "Too small packet",
+			data:      []byte("YSF"),
+			expectErr: true,
 		},
 		{
-			name:       "Invalid poll packet size",
-			data:       []byte("YSFPW1ABC"),
-			expectErr:  true,
+			name:      "Invalid poll packet size",
+			data:      []byte("YSFPW1ABC"),
+			expectErr: true,
 		},
 		{
-			name:       "Unknown packet type",
-			data:       []byte("UNKNW1ABC     "),
-			expectErr:  true,
+			name:      "Unknown packet type",
+			data:      []byte("UNKNW1ABC     "),
+			expectErr: true,
 		},
 	}
 
@@ -165,11 +165,11 @@ func TestPacketString(t *testing.T) {
 
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) &&
-		   (s == substr ||
-		    (len(s) > len(substr) &&
-		     (s[:len(substr)] == substr ||
-		      s[len(s)-len(substr):] == substr ||
-		      containsSubstr(s, substr))))
+		(s == substr ||
+			(len(s) > len(substr) &&
+				(s[:len(substr)] == substr ||
+					s[len(s)-len(substr):] == substr ||
+					containsSubstr(s, substr))))
 }
 
 func containsSubstr(s, substr string) bool {

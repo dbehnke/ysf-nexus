@@ -1,0 +1,49 @@
+name: golangci-lint
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  golangci-lint:
+    name: Run golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Install golangci-lint (build from source with go install)
+        run: |
+          # Build golangci-lint with the runner's Go toolchain to avoid
+          # mismatches between the binary's build Go version and the
+          # repository's targeted Go version. Install into a temporary
+          # GOBIN and persist that directory into $GITHUB_PATH so subsequent
+          # steps can invoke the binary without needing sudo or step-local
+          # PATH hacks. We intentionally use @latest to get the latest
+          # released golangci-lint (you requested not to pin releases).
+          echo "Installing golangci-lint@latest"
+          export GOBIN="$RUNNER_TEMP/gobin"
+          mkdir -p "$GOBIN"
+          export PATH="$GOBIN:$PATH"
+          # Install the v2 series using the /v2 module path so @latest picks
+          # the latest v2 release (for example v2.5.0) instead of the v1.x
+          # releases. This matches the upstream module's module path.
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+          LINT_BIN="$GOBIN/golangci-lint"
+          echo "built: $LINT_BIN"
+          if [ ! -f "$LINT_BIN" ]; then
+            echo "golangci-lint binary not found at $LINT_BIN" >&2
+            exit 1
+          fi
+          # Add the GOBIN to the job PATH for subsequent steps
+          echo "$GOBIN" >> "$GITHUB_PATH"
+          golangci-lint --version
+
+      - name: Run golangci-lint
+        run: |
+          golangci-lint --version
+          golangci-lint run ./...

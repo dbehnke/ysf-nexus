@@ -69,6 +69,14 @@ func validateServer(config *ServerConfig) error {
 		return fmt.Errorf("description too long (max 14 characters): %s", config.Description)
 	}
 
+	if config.TalkMaxDuration <= 0 {
+		return fmt.Errorf("talk_max_duration must be positive")
+	}
+
+	if config.UnmuteAfter < 0 {
+		return fmt.Errorf("unmute_after cannot be negative")
+	}
+
 	return nil
 }
 

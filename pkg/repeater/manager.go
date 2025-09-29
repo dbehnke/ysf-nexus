@@ -2,32 +2,43 @@ package repeater
 
 import (
 	"context"
-	"log"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/dbehnke/ysf-nexus/pkg/logger"
 )
 
 // Manager manages multiple YSF repeaters
 type Manager struct {
-	repeaters   sync.Map
-	timeout     time.Duration
-	blocklist   *Blocklist
-	events      chan<- Event
+	repeaters    sync.Map
+	timeout      time.Duration
+	// activeKey holds the address string of the currently active (allowed) repeater
+	activeKey    string
+	activeMu     sync.Mutex
+	// muted repeaters map address -> unmute until time (zero means muted until they stop)
+	muted        sync.Map // map[string]time.Time
+	// maximum allowed continuous talk duration before muting
+	talkMaxDuration time.Duration
+	// duration after which a muted repeater will be automatically unmuted (0 = mute until stop)
+	unmuteAfter time.Duration
+	blocklist    *Blocklist
+	events       chan<- Event
 	maxRepeaters int
-	mu          sync.RWMutex
-	metrics     ManagerMetrics
+	mu           sync.RWMutex
+	metrics      ManagerMetrics
+	logger       *logger.Logger
 }
 
 // ManagerMetrics holds manager statistics
 type ManagerMetrics struct {
-	TotalConnections    uint64
-	ActiveConnections   uint64
-	BlockedConnections  uint64
-	TimeoutConnections  uint64
-	TotalPackets        uint64
-	TotalBytesRx        uint64
-	TotalBytesTx        uint64
+	TotalConnections   uint64
+	ActiveConnections  uint64
+	BlockedConnections uint64
+	TimeoutConnections uint64
+	TotalPackets       uint64
+	TotalBytesRx       uint64
+	TotalBytesTx       uint64
 }
 
 // Event represents a repeater event
@@ -50,12 +61,21 @@ const (
 )
 
 // NewManager creates a new repeater manager
-func NewManager(timeout time.Duration, maxRepeaters int, eventChan chan<- Event) *Manager {
+// NewManager creates a new manager with a default logger.
+func NewManager(timeout time.Duration, maxRepeaters int, eventChan chan<- Event, talkMaxDuration, unmuteAfter time.Duration) *Manager {
+	return NewManagerWithLogger(timeout, maxRepeaters, eventChan, talkMaxDuration, unmuteAfter, logger.Default())
+}
+
+// NewManagerWithLogger creates a new manager and attaches the provided logger.
+func NewManagerWithLogger(timeout time.Duration, maxRepeaters int, eventChan chan<- Event, talkMaxDuration, unmuteAfter time.Duration, log *logger.Logger) *Manager {
 	return &Manager{
-		timeout:      timeout,
-		maxRepeaters: maxRepeaters,
-		events:       eventChan,
-		blocklist:    NewBlocklist(),
+		timeout:         timeout,
+		maxRepeaters:    maxRepeaters,
+		events:          eventChan,
+		blocklist:       NewBlocklist(),
+		talkMaxDuration: talkMaxDuration,
+		unmuteAfter:     unmuteAfter,
+		logger:          log.WithComponent("manager"),
 	}
 }
 
@@ -79,7 +99,10 @@ func (m *Manager) AddRepeater(callsign string, addr *net.UDPAddr) (*Repeater, bo
 	// Check max connections
 	count := m.Count()
 	if count >= m.maxRepeaters {
-		log.Printf("Maximum repeater limit reached (%d), rejecting %s", m.maxRepeaters, callsign)
+		if m.logger != nil {
+			m.logger.Warn("Maximum repeater limit reached, rejecting",
+				logger.Int("limit", m.maxRepeaters), logger.String("callsign", callsign))
+		}
 		return nil, false
 	}
 
@@ -93,7 +116,9 @@ func (m *Manager) AddRepeater(callsign string, addr *net.UDPAddr) (*Repeater, bo
 	m.mu.Unlock()
 
 	m.sendEvent(EventConnect, callsign, addr.String(), 0)
-	log.Printf("New repeater connected: %s from %s", callsign, addr)
+	if m.logger != nil {
+		m.logger.Info("New repeater connected", logger.String("callsign", callsign), logger.String("from", addr.String()))
+	}
 
 	return repeater, true // New repeater
 }
@@ -115,6 +140,14 @@ func (m *Manager) RemoveRepeater(addr *net.UDPAddr) bool {
 		// Stop talking if active
 		if r.IsTalking() {
 			duration := r.StopTalking()
+			// Clear activeKey if this was active
+			m.activeMu.Lock()
+			if m.activeKey == addr.String() {
+				m.activeKey = ""
+			}
+			m.activeMu.Unlock()
+			// Ensure unmuted
+			m.muted.Delete(addr.String())
 			m.sendEvent(EventTalkEnd, r.Callsign(), addr.String(), duration)
 		}
 
@@ -123,8 +156,9 @@ func (m *Manager) RemoveRepeater(addr *net.UDPAddr) bool {
 		m.mu.Unlock()
 
 		m.sendEvent(EventDisconnect, r.Callsign(), addr.String(), 0)
-		log.Printf("Repeater disconnected: %s from %s (uptime: %v)",
-			r.Callsign(), addr, r.Uptime())
+		if m.logger != nil {
+			m.logger.Info("Repeater disconnected", logger.String("callsign", r.Callsign()), logger.String("from", addr.String()), logger.String("uptime", r.Uptime().String()))
+		}
 
 		return true
 	}
@@ -183,13 +217,66 @@ func (m *Manager) ProcessPacket(callsign string, addr *net.UDPAddr, packetType s
 
 	// Handle talk state changes for data packets
 	if packetType == "YSFD" {
-		if !repeater.IsTalking() {
-			repeater.StartTalking()
-			m.sendEvent(EventTalkStart, callsign, addr.String(), 0)
-			log.Printf("Repeater %s started talking", callsign)
-		} else {
-			// Update talk data timestamp for ongoing transmission
+		// If this repeater is muted, check if mute expired
+		if v, muted := m.muted.Load(addr.String()); muted {
+			if until, ok := v.(time.Time); ok {
+				if !until.IsZero() && time.Now().After(until) {
+					// unmute automatically
+					m.muted.Delete(addr.String())
+				} else {
+					// still muted
+					return
+				}
+			} else {
+				// unknown value type - treat as muted
+				return
+			}
+		}
+
+		// Enforce single active stream: only allow the first active repeater
+		m.activeMu.Lock()
+		currentActive := m.activeKey
+		if currentActive == "" {
+			// no active repeater yet
+			if !repeater.IsTalking() {
+				repeater.StartTalking()
+				m.activeKey = addr.String()
+				m.sendEvent(EventTalkStart, callsign, addr.String(), 0)
+				if m.logger != nil {
+					m.logger.Info("Repeater started talking", logger.String("callsign", callsign))
+				}
+			} else {
+				// already talking
+				repeater.UpdateTalkData()
+			}
+			m.activeMu.Unlock()
+		} else if currentActive == addr.String() {
+			// This repeater is the active one; refresh talk data
+			m.activeMu.Unlock()
 			repeater.UpdateTalkData()
+			// If they've been talking too long, mute them
+			if repeater.TalkDuration() > m.talkMaxDuration {
+				// mute and stop talking
+				repeater.StopTalking()
+				// compute unmute time (zero means muted until they stop)
+				var unmuteUntil time.Time
+				if m.unmuteAfter > 0 {
+					unmuteUntil = time.Now().Add(m.unmuteAfter)
+				}
+				m.muted.Store(addr.String(), unmuteUntil)
+				m.activeMu.Lock()
+				m.activeKey = ""
+				m.activeMu.Unlock()
+				m.sendEvent(EventTimeout, callsign, addr.String(), 0)
+				if m.logger != nil {
+					m.logger.Warn("Repeater muted after exceeding talk max duration", logger.String("callsign", callsign))
+				}
+			}
+		} else {
+			// Another repeater is currently active; ignore this talk start
+			m.activeMu.Unlock()
+			// Optionally update last talk data timestamp to show activity but do not start talking
+			return
 		}
 	}
 }
@@ -245,6 +332,14 @@ func (m *Manager) cleanupTimedOut() {
 			// Handle ongoing talk
 			if repeater.IsTalking() {
 				duration := repeater.StopTalking()
+				// If this was the active repeater, clear activeKey
+				m.activeMu.Lock()
+				if m.activeKey == addr.String() {
+					m.activeKey = ""
+				}
+				m.activeMu.Unlock()
+				// Unmute if previously muted
+				m.muted.Delete(addr.String())
 				m.sendEvent(EventTalkEnd, repeater.Callsign(), addr.String(), duration)
 			}
 
@@ -257,8 +352,8 @@ func (m *Manager) cleanupTimedOut() {
 		m.RemoveRepeater(addr)
 	}
 
-	if len(toRemove) > 0 {
-		log.Printf("Cleaned up %d timed-out repeaters", len(toRemove))
+	if len(toRemove) > 0 && m.logger != nil {
+		m.logger.Info("Cleaned up timed-out repeaters", logger.Int("count", len(toRemove)))
 	}
 }
 
@@ -271,8 +366,32 @@ func (m *Manager) checkTalkTimeouts() {
 		repeater := value.(*Repeater)
 		if repeater.IsTalkTimedOut(talkTimeout) {
 			duration := repeater.StopTalking()
-			m.sendEvent(EventTalkEnd, repeater.Callsign(), repeater.Address().String(), duration)
-			log.Printf("Repeater %s stopped talking (timeout after %v)", repeater.Callsign(), duration)
+			// Clear activeKey if this was active
+			addrStr := repeater.Address().String()
+			m.activeMu.Lock()
+			if m.activeKey == addrStr {
+				m.activeKey = ""
+			}
+			m.activeMu.Unlock()
+			// Unmute if necessary (stop talking clears mute only if unmuteAfter==0)
+			if v, ok := m.muted.Load(addrStr); ok {
+				if until, ok2 := v.(time.Time); ok2 {
+					if until.IsZero() {
+						// muted until stop -> clear
+						m.muted.Delete(addrStr)
+					} else if time.Now().After(until) {
+						// unmute expired
+						m.muted.Delete(addrStr)
+					}
+				} else {
+					// unknown type - delete to be safe
+					m.muted.Delete(addrStr)
+				}
+			}
+				m.sendEvent(EventTalkEnd, repeater.Callsign(), addrStr, duration)
+				if m.logger != nil {
+					m.logger.Info("Repeater stopped talking (timeout)", logger.String("callsign", repeater.Callsign()), logger.Duration("duration", duration))
+				}
 		}
 		return true
 	})
@@ -292,14 +411,14 @@ func (m *Manager) GetStats() ManagerStats {
 	})
 
 	return ManagerStats{
-		ActiveRepeaters:     len(repeaterStats),
-		TotalConnections:    m.metrics.TotalConnections,
-		BlockedConnections:  m.metrics.BlockedConnections,
-		TimeoutConnections:  m.metrics.TimeoutConnections,
-		TotalPackets:        m.metrics.TotalPackets,
-		TotalBytesReceived:  m.metrics.TotalBytesRx,
+		ActiveRepeaters:       len(repeaterStats),
+		TotalConnections:      m.metrics.TotalConnections,
+		BlockedConnections:    m.metrics.BlockedConnections,
+		TimeoutConnections:    m.metrics.TimeoutConnections,
+		TotalPackets:          m.metrics.TotalPackets,
+		TotalBytesReceived:    m.metrics.TotalBytesRx,
 		TotalBytesTransmitted: m.metrics.TotalBytesTx,
-		Repeaters:           repeaterStats,
+		Repeaters:             repeaterStats,
 	}
 }
 
@@ -320,16 +439,38 @@ func (m *Manager) GetBlocklist() *Blocklist {
 	return m.blocklist
 }
 
+// IsMuted reports whether the repeater at the given address is currently muted.
+// Exported so tests and callers can check mute state without accessing internal fields.
+func (m *Manager) IsMuted(addr *net.UDPAddr) bool {
+	if v, ok := m.muted.Load(addr.String()); ok {
+		if until, ok2 := v.(time.Time); ok2 {
+			if until.IsZero() {
+				return true
+			}
+			return time.Now().Before(until)
+		}
+		// unknown type stored, treat as muted
+		return true
+	}
+	return false
+}
+
 // DumpRepeaters logs all current repeaters
 func (m *Manager) DumpRepeaters() {
 	repeaters := m.GetAllRepeaters()
-	log.Printf("=== Repeater Dump ===")
-	log.Printf("Active repeaters: %d", len(repeaters))
+	if m.logger != nil {
+		m.logger.Info("=== Repeater Dump ===")
+		m.logger.Info("Active repeaters", logger.Int("count", len(repeaters)))
+	}
 
 	for _, repeater := range repeaters {
-		log.Printf("  %s", repeater.String())
+		if m.logger != nil {
+			m.logger.Info(repeater.String())
+		}
 	}
-	log.Printf("=== End Dump ===")
+	if m.logger != nil {
+		m.logger.Info("=== End Dump ===")
+	}
 }
 
 // sendEvent sends an event to the event channel
@@ -348,8 +489,10 @@ func (m *Manager) sendEvent(eventType, callsign, address string, duration time.D
 
 	select {
 	case m.events <- event:
-	default:
-		// Don't block if event channel is full
-		log.Printf("Event channel full, dropping event: %+v", event)
+		default:
+			// Don't block if event channel is full
+			if m.logger != nil {
+				m.logger.Warn("Event channel full, dropping event", logger.Any("event", event))
+			}
 	}
 }

@@ -142,8 +142,10 @@ func TestRepeaterStats(t *testing.T) {
 		t.Errorf("Expected callsign %s in stats, got %s", callsign, stats.Callsign)
 	}
 
-	if stats.Address != addr.String() {
-		t.Errorf("Expected address %s in stats, got %s", addr.String(), stats.Address)
+	// Address is masked for privacy (last two octets replaced with **)
+	expectedMasked := "127.0.**:42000"
+	if stats.Address != expectedMasked {
+		t.Errorf("Expected masked address %s in stats, got %s", expectedMasked, stats.Address)
 	}
 
 	if stats.PacketCount != 1 {

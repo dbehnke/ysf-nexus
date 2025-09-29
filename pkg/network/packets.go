@@ -10,18 +10,18 @@ import (
 
 // YSF packet types
 const (
-	PacketTypePoll = "YSFP"
-	PacketTypeData = "YSFD"
+	PacketTypePoll   = "YSFP"
+	PacketTypeData   = "YSFD"
 	PacketTypeUnlink = "YSFU"
 	PacketTypeStatus = "YSFS"
 	PacketTypeOption = "YSFO"
-	PacketTypeInfo = "YSFI"
+	PacketTypeInfo   = "YSFI"
 )
 
 // Packet sizes
 const (
-	DataPacketSize = 155
-	PollPacketSize = 14
+	DataPacketSize   = 155
+	PollPacketSize   = 14
 	StatusPacketSize = 42
 )
 
@@ -101,8 +101,8 @@ func ParsePacket(data []byte, addr *net.UDPAddr) (*Packet, error) {
 			return nil, fmt.Errorf("invalid unlink packet size: %d", len(data))
 		}
 	case PacketTypeStatus:
-		// Status packets can vary in size
-		if len(data) < 14 {
+		// Status packets can vary in size. Accept minimal 4-byte 'YSFS' requests
+		if len(data) < 4 {
 			return nil, fmt.Errorf("invalid status packet size: %d", len(data))
 		}
 	case PacketTypeOption, PacketTypeInfo:
@@ -119,7 +119,14 @@ func ParsePacket(data []byte, addr *net.UDPAddr) (*Packet, error) {
 func CreatePollResponse() []byte {
 	packet := make([]byte, PollPacketSize)
 	copy(packet[0:4], PacketTypePoll)
-	copy(packet[4:14], "REFLECTOR\x00")
+	// Some implementations might be sensitive to the exact format
+	// Ensure exactly 10 bytes for the reflector field with space-padding
+	reflectorBytes := make([]byte, 10)
+	copy(reflectorBytes, "REFLECTOR")
+	for i := len("REFLECTOR"); i < 10; i++ {
+		reflectorBytes[i] = ' '
+	}
+	copy(packet[4:14], reflectorBytes)
 	return packet
 }
 
@@ -130,11 +137,11 @@ func CreateStatusResponse(name, description string, count int) []byte {
 	// Type
 	copy(packet[0:4], PacketTypeStatus)
 
-	// Hash (simple hash based on name)
+	// Hash (5-digit hash based on name) - some implementations expect this to be more specific
 	hash := fmt.Sprintf("%05d", simpleHash(name)%100000)
 	copy(packet[4:9], hash)
 
-	// Name (16 bytes, padded with spaces)
+	// Name (16 bytes, space-padded like pYSFReflector)
 	nameBytes := make([]byte, 16)
 	copy(nameBytes, name)
 	for i := len(name); i < 16; i++ {
@@ -142,7 +149,7 @@ func CreateStatusResponse(name, description string, count int) []byte {
 	}
 	copy(packet[9:25], nameBytes)
 
-	// Description (14 bytes, padded with spaces)
+	// Description (14 bytes, space-padded)
 	descBytes := make([]byte, 14)
 	copy(descBytes, description)
 	for i := len(description); i < 14; i++ {
@@ -174,7 +181,8 @@ func (p *Packet) IsUnlinkPacket() bool {
 
 // IsStatusRequest checks if the packet is a status request
 func (p *Packet) IsStatusRequest() bool {
-	return p.Type == PacketTypeStatus && len(p.Data) == 14
+	// Accept both full 14-byte status requests and minimal 4-byte 'YSFS' probes
+	return p.Type == PacketTypeStatus && (len(p.Data) == 14 || len(p.Data) == 4)
 }
 
 // GetSequence extracts sequence number from data packet

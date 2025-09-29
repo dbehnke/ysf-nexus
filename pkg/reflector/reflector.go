@@ -40,10 +40,13 @@ func New(cfg *config.Config, log *logger.Logger) *Reflector {
 	r.server.SetDebug(cfg.Logging.Level == "debug")
 
 	// Initialize repeater manager
-	r.repeaterManager = repeater.NewManager(
+	r.repeaterManager = repeater.NewManagerWithLogger(
 		cfg.Server.Timeout,
 		cfg.Server.MaxConnections,
 		eventChan,
+		cfg.Server.TalkMaxDuration,
+		cfg.Server.UnmuteAfter,
+		r.logger,
 	)
 
 	// Initialize web server
@@ -163,15 +166,15 @@ func (r *Reflector) GetStats() *Stats {
 
 // Stats represents reflector statistics
 type Stats struct {
-	Uptime           time.Duration                `json:"uptime"`
-	ActiveRepeaters  int                          `json:"active_repeaters"`
-	TotalConnections uint64                       `json:"total_connections"`
-	TotalPackets     uint64                       `json:"total_packets"`
-	PacketsReceived  map[string]int64             `json:"packets_received"`
-	PacketsSent      map[string]int64             `json:"packets_sent"`
-	BytesReceived    int64                        `json:"bytes_received"`
-	BytesSent        int64                        `json:"bytes_sent"`
-	RepeaterStats    repeater.ManagerStats        `json:"repeater_stats"`
+	Uptime           time.Duration         `json:"uptime"`
+	ActiveRepeaters  int                   `json:"active_repeaters"`
+	TotalConnections uint64                `json:"total_connections"`
+	TotalPackets     uint64                `json:"total_packets"`
+	PacketsReceived  map[string]int64      `json:"packets_received"`
+	PacketsSent      map[string]int64      `json:"packets_sent"`
+	BytesReceived    int64                 `json:"bytes_received"`
+	BytesSent        int64                 `json:"bytes_sent"`
+	RepeaterStats    repeater.ManagerStats `json:"repeater_stats"`
 }
 
 // registerHandlers registers packet handlers with the network server
@@ -201,6 +204,12 @@ func (r *Reflector) handlePollPacket(packet *network.Packet) error {
 		r.logger.Info("New repeater registered",
 			logger.String("callsign", packet.Callsign),
 			logger.String("source", packet.Source.String()))
+	} else {
+		// Log repeated connections for debugging OpenSpot issue
+		r.logger.Debug("Existing repeater poll",
+			logger.String("callsign", packet.Callsign),
+			logger.String("source", packet.Source.String()),
+			logger.Duration("uptime", rep.Uptime()))
 	}
 
 	// Process packet for statistics
@@ -276,11 +285,17 @@ func (r *Reflector) handleUnlinkPacket(packet *network.Packet) error {
 // handleStatusPacket handles YSFS (status request) packets
 func (r *Reflector) handleStatusPacket(packet *network.Packet) error {
 	if !packet.IsStatusRequest() {
+		// Log non-status packets that come through this handler for debugging
+		r.logger.Debug("Received non-status packet in status handler",
+			logger.String("source", packet.Source.String()),
+			logger.String("type", packet.Type),
+			logger.Int("size", len(packet.Data)))
 		return nil
 	}
 
-	r.logger.Debug("Received status request",
-		logger.String("source", packet.Source.String()))
+	r.logger.Info("Received status request",
+		logger.String("source", packet.Source.String()),
+		logger.String("callsign", packet.Callsign))
 
 	// Create status response
 	count := r.repeaterManager.Count()
@@ -290,6 +305,13 @@ func (r *Reflector) handleStatusPacket(packet *network.Packet) error {
 		count,
 	)
 
+	r.logger.Debug("Sending status response",
+		logger.String("source", packet.Source.String()),
+		logger.String("name", r.config.Server.Name),
+		logger.String("description", r.config.Server.Description),
+		logger.Int("count", count),
+		logger.Int("response_size", len(response)))
+
 	// Send response
 	if err := r.server.SendPacket(response, packet.Source); err != nil {
 		r.logger.Error("Failed to send status response",
@@ -298,31 +320,14 @@ func (r *Reflector) handleStatusPacket(packet *network.Packet) error {
 		return err
 	}
 
+	r.logger.Info("Status response sent successfully",
+		logger.String("source", packet.Source.String()))
+
 	return nil
 }
 
-// processEvents processes repeater events
-func (r *Reflector) processEvents(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case event := <-r.eventChan:
-			r.logger.Info("Repeater event",
-				logger.String("type", event.Type),
-				logger.String("callsign", event.Callsign),
-				logger.String("address", event.Address),
-				logger.Duration("duration", event.Duration))
-
-			// Forward event to web server via separate channel
-			// Note: The web server has its own event channel that it shares with the repeater manager
-			// This was the wrong approach - we should not consume events here
-
-			// TODO: Forward to MQTT if configured
-			// TODO: Store in database if configured
-		}
-	}
-}
+// processEvents was removed because events are forwarded/consumed elsewhere. If needed,
+// reintroduce with careful event channel ownership semantics.
 
 // logStats periodically logs statistics
 func (r *Reflector) logStats(ctx context.Context) {

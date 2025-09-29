@@ -1,0 +1,56 @@
+name: govulncheck
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  govulncheck:
+    name: Run govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Install govulncheck
+        run: |
+          echo "Installing govulncheck@latest"
+          export GOBIN="$RUNNER_TEMP/gobin"
+          mkdir -p "$GOBIN"
+          export PATH="$GOBIN:$PATH"
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          GOV_BIN="$GOBIN/govulncheck"
+          echo "built: $GOV_BIN"
+          if [ ! -f "$GOV_BIN" ]; then
+            echo "govulncheck binary not found at $GOV_BIN" >&2
+            exit 1
+          fi
+          echo "$GOBIN" >> "$GITHUB_PATH"
+
+      - name: Run govulncheck
+        run: |
+          # Locate the module root (where go.mod lives). The repository layout
+          # may place the module at the repo root or in a subdirectory named
+          # `ysf-nexus` (or other). Detect it robustly and cd there.
+          if [ -f go.mod ]; then
+            MODROOT=.
+          elif [ -f ysf-nexus/go.mod ]; then
+            MODROOT=ysf-nexus
+          else
+            # Try to find any go.mod in the tree and use its directory
+            MODPATH=$(git ls-files | grep -m1 '^.*/go.mod' || true)
+            if [ -n "$MODPATH" ]; then
+              MODROOT=$(dirname "$MODPATH")
+            else
+              echo "could not find go.mod in repository" >&2
+              exit 1
+            fi
+          fi
+          echo "module root=$MODROOT"
+          cd "$MODROOT"
+          # Fail the job if govulncheck finds vulnerabilities (it exits non-zero)
+          govulncheck ./...
