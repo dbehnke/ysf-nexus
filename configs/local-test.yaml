@@ -1,0 +1,20 @@
+server:
+  host: "0.0.0.0"
+  port: 42000
+  name: "local-test"
+  timeout: "10s"
+
+web:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+
+bridges:
+  - name: "kc-bridge"
+    host: "ysf.kansascitywide.com"
+    port: 42000
+    enabled: true
+    permanent: true
+    max_retries: 0
+    retry_delay: "15s"
+    health_check: "60s"

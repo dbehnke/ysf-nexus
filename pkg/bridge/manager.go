@@ -427,6 +427,19 @@ func (m *Manager) GetBridge(name string) *Bridge {
 	return m.bridges[name]
 }
 
+// IsBridgeAddress checks if an address belongs to a bridge connection
+func (m *Manager) IsBridgeAddress(addr *net.UDPAddr) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	for _, bridge := range m.bridges {
+		if bridge.IsConnectedTo(addr) {
+			return true
+		}
+	}
+	return false
+}
+
 // HandleIncomingPacket processes packets received from bridge connections
 func (m *Manager) HandleIncomingPacket(data []byte, fromAddr *net.UDPAddr) {
 	// Forward packets from bridge connections to all local repeaters
@@ -446,9 +459,28 @@ func (m *Manager) HandleIncomingPacket(data []byte, fromAddr *net.UDPAddr) {
 			
 			bridge.IncrementRxStats(uint64(len(data)))
 			
+			// Notify bridge of received packet (for ping response handling)
+			bridge.OnPacketReceived(data)
+			
 			// TODO: Forward to local repeaters (implement packet routing)
 			// This would integrate with the main reflector's packet routing system
 			break
 		}
 	}
+}
+
+// GetConnectedAddresses returns the addresses of all currently connected bridges
+func (m *Manager) GetConnectedAddresses() []*net.UDPAddr {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	var addresses []*net.UDPAddr
+	for _, bridge := range m.bridges {
+		if bridge.IsConnected() {
+			if addr := bridge.GetRemoteAddr(); addr != nil {
+				addresses = append(addresses, addr)
+			}
+		}
+	}
+	return addresses
 }

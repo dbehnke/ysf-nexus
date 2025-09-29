@@ -118,6 +118,18 @@
             </li>
             <li>
               <router-link
+                to="/bridges"
+                class="flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors"
+                :class="$route.path === '/bridges' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'"
+              >
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                Bridges
+              </router-link>
+            </li>
+            <li>
+              <router-link
                 to="/logs"
                 class="flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors"
                 :class="$route.path === '/logs' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'"

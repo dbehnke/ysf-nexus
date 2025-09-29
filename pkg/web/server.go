@@ -20,6 +20,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 
+	"github.com/dbehnke/ysf-nexus/pkg/bridge"
 	"github.com/dbehnke/ysf-nexus/pkg/config"
 	"github.com/dbehnke/ysf-nexus/pkg/logger"
 	"github.com/dbehnke/ysf-nexus/pkg/repeater"
@@ -41,6 +42,8 @@ type Server struct {
 	logger          *logger.Logger
 	httpServer      *http.Server
 	repeaterManager *repeater.Manager
+	bridgeManager   interface{}
+	reflector       interface{}
 	eventChan       <-chan repeater.Event
 	talkLogs        []TalkLogEntry
 	websocketHub    *WebSocketHub
@@ -82,7 +85,7 @@ var upgrader = websocket.Upgrader{
 }
 
 // NewServer creates a new web server
-func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager, eventChan <-chan repeater.Event) *Server {
+func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager, eventChan <-chan repeater.Event, bridgeManager interface{}, reflector interface{}) *Server {
 	hub := &WebSocketHub{
 		clients:    make(map[*websocket.Conn]bool),
 		broadcast:  make(chan []byte, 256),
@@ -96,6 +99,8 @@ func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager
 		config:          cfg,
 		logger:          log.WithComponent("web"),
 		repeaterManager: manager,
+		bridgeManager:   bridgeManager,
+		reflector:       reflector,
 		eventChan:       eventChan,
 		talkLogs:        make([]TalkLogEntry, 0),
 		websocketHub:    hub,
@@ -192,7 +197,9 @@ func (s *Server) setupRoutes() *mux.Router {
 	// Stats endpoints
 	api.HandleFunc("/stats", s.handleStats).Methods("GET")
 	api.HandleFunc("/repeaters", s.handleRepeaters).Methods("GET")
+	api.HandleFunc("/bridges", s.handleBridges).Methods("GET")
 	api.HandleFunc("/logs/talk", s.handleTalkLogs).Methods("GET")
+	api.HandleFunc("/current-talker", s.handleCurrentTalker).Methods("GET")
 
 	// System endpoints
 	api.HandleFunc("/system/info", s.handleSystemInfo).Methods("GET")
@@ -521,6 +528,88 @@ func (s *Server) handleRepeaters(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"repeaters": stats.Repeaters,
 	}); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
+}
+
+func (s *Server) handleBridges(w http.ResponseWriter, r *http.Request) {
+	bridges := make(map[string]interface{})
+	
+	// Check if bridge manager is available and has GetStatus method
+	if s.bridgeManager != nil {
+		// Use type assertion to check if it has GetStatus method with correct return type
+		if bm, ok := s.bridgeManager.(interface{ GetStatus() map[string]bridge.BridgeStatus }); ok {
+			status := bm.GetStatus()
+			// Convert to map[string]interface{} for JSON serialization
+			for name, bridgeStatus := range status {
+				bridges[name] = bridgeStatus
+			}
+		}
+	}
+	
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
+		"bridges": bridges,
+	}); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
+}
+
+func (s *Server) handleCurrentTalker(w http.ResponseWriter, r *http.Request) {
+	// First check for regular repeater talkers
+	stats := s.repeaterManager.GetStats()
+	for _, repeater := range stats.Repeaters {
+		if repeater.IsTalking {
+			// Found a regular repeater that's talking
+			response := map[string]interface{}{
+				"current_talker": map[string]interface{}{
+					"callsign":      repeater.Callsign,
+					"address":       repeater.Address,
+					"type":          "repeater",
+					"is_talking":    true,
+					"talk_duration": repeater.TalkDuration,
+				},
+			}
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				s.logger.Error("failed to encode JSON response", logger.Error(err))
+			}
+			return
+		}
+	}
+	
+	// No regular repeater talking, check for bridge talkers
+	if s.reflector != nil {
+		if refl, ok := s.reflector.(interface{ GetCurrentBridgeTalker() interface{} }); ok {
+			bridgeTalker := refl.GetCurrentBridgeTalker()
+			if bridgeTalker != nil {
+				// Use type assertion to extract bridge talker information
+				if bt, ok := bridgeTalker.(interface {
+					GetCallsign() string
+					GetBridgeName() string 
+					GetTalkDuration() time.Duration
+				}); ok {
+					response := map[string]interface{}{
+						"current_talker": map[string]interface{}{
+							"callsign":      bt.GetCallsign(),
+							"address":       bt.GetBridgeName(), // Show bridge name as "address" 
+							"type":          "bridge",
+							"is_talking":    true,
+							"talk_duration": int(bt.GetTalkDuration().Seconds()),
+						},
+					}
+					if err := json.NewEncoder(w).Encode(response); err != nil {
+						s.logger.Error("failed to encode JSON response", logger.Error(err))
+					}
+					return
+				}
+			}
+		}
+	}
+	
+	// No one is talking
+	response := map[string]interface{}{
+		"current_talker": nil,
+	}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		s.logger.Error("failed to encode JSON response", logger.Error(err))
 	}
 }

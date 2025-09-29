@@ -72,19 +72,50 @@ export const useDashboardStore = defineStore('dashboard', () => {
     try {
       const response = await axios.get('/api/repeaters')
       repeaters.value = response.data.repeaters || []
+      error.value = null
+    } catch (err) {
+      error.value = 'Failed to fetch repeaters'
+      console.error('Error fetching repeaters:', err)
+    }
+  }
 
-      // Update current talker
-      const talking = repeaters.value.find(r => r.is_talking)
-      if (talking && (!currentTalker.value || currentTalker.value.callsign !== talking.callsign)) {
-        currentTalker.value = talking
-      } else if (!talking) {
+  async function fetchCurrentTalker() {
+    try {
+      console.log('Fetching current talker...')
+      const response = await axios.get('/api/current-talker')
+      console.log('Current talker response:', response.data)
+      
+      if (response.data.current_talker) {
+        const talker = response.data.current_talker
+        console.log('Setting current talker:', talker)
+        
+        // If it's a different talker, update currentTalker
+        if (!currentTalker.value || 
+            currentTalker.value.callsign !== talker.callsign ||
+            currentTalker.value.address !== talker.address ||
+            currentTalker.value.type !== talker.type) {
+          currentTalker.value = {
+            ...talker,
+            talk_start_time: new Date(Date.now() - (talker.talk_duration * 1000))
+          }
+        } else {
+          // Update existing talker's duration and other properties
+          currentTalker.value = {
+            ...currentTalker.value,
+            ...talker,
+            talk_start_time: currentTalker.value.talk_start_time // Keep original start time
+          }
+        }
+        console.log('Current talker set to:', currentTalker.value)
+      } else {
+        console.log('No current talker in response, clearing currentTalker')
         currentTalker.value = null
       }
 
       error.value = null
     } catch (err) {
-      error.value = 'Failed to fetch repeaters'
-      console.error('Error fetching repeaters:', err)
+      error.value = 'Failed to fetch current talker'
+      console.error('Error fetching current talker:', err)
     }
   }
 
@@ -164,7 +195,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         break
 
       case 'talk_start':
-        // Find the correct repeater - prefer by callsign+address if available, fallback to callsign only
+        // Update repeater state if it's a repeater talker
         let startTalker
         if (data.data.address) {
           startTalker = repeaters.value.find(r => r.callsign === data.data.callsign && r.address === data.data.address)
@@ -175,14 +206,16 @@ export const useDashboardStore = defineStore('dashboard', () => {
         if (startTalker) {
           startTalker.is_talking = true
           startTalker.talk_start_time = new Date(data.data.timestamp)
-          currentTalker.value = startTalker
         }
+
+        // Fetch current talker from unified API to handle both repeaters and bridge talkers
+        fetchCurrentTalker()
         startTalkUpdateTimer()
         startFastStatsTimer()
         break
 
       case 'talk_end':
-        // Find the correct repeater - prefer by callsign+address if available, fallback to callsign only
+        // Update repeater state if it's a repeater talker
         let endTalker
         if (data.data.address) {
           endTalker = repeaters.value.find(r => r.callsign === data.data.callsign && r.address === data.data.address)
@@ -194,10 +227,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
           endTalker.is_talking = false
         }
 
-        // Note: Talk logs are managed by the server and fetched via API
-        // Real-time updates are handled by periodic fetching when needed
-
-        // Clear current talker if it was this one
+        // Clear current talker if it was this one (handles both repeaters and bridge talkers)
         if (currentTalker.value && currentTalker.value.callsign === data.data.callsign) {
           // If address is available, also check address match
           if (!data.data.address || currentTalker.value.address === data.data.address) {
@@ -205,11 +235,16 @@ export const useDashboardStore = defineStore('dashboard', () => {
           }
         }
 
-        // Stop timers if no one is talking
-        if (activeTalkers.value.length === 0) {
-          stopTalkUpdateTimer()
-          startSlowStatsTimer()
-        }
+        // Fetch current talker to check if someone else is still talking
+        fetchCurrentTalker()
+
+        // Stop timers if no one is talking (check after fetchCurrentTalker completes)
+        setTimeout(() => {
+          if (!currentTalker.value) {
+            stopTalkUpdateTimer()
+            startSlowStatsTimer()
+          }
+        }, 100)
         break
 
       case 'event':
@@ -232,7 +267,14 @@ export const useDashboardStore = defineStore('dashboard', () => {
       clearInterval(talkUpdateTimer.value)
     }
     talkUpdateTimer.value = setInterval(() => {
-      // Update live talk durations
+      // Update current talker duration (works for both repeaters and bridge talkers)
+      if (currentTalker.value && currentTalker.value.talk_start_time) {
+        const now = new Date()
+        const durationMs = now - currentTalker.value.talk_start_time
+        currentTalker.value.talk_duration = Math.floor(durationMs / 1000)
+      }
+      
+      // Update repeater talk durations for any active repeaters
       repeaters.value.forEach(repeater => {
         if (repeater.is_talking && repeater.talk_start_time) {
           const now = new Date()
@@ -279,6 +321,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   function initialize() {
     fetchStats()
     fetchRepeaters()
+    fetchCurrentTalker()
     fetchTalkLogs()
     connectWebSocket()
     startSlowStatsTimer() // Start with slow refresh when idle
@@ -303,6 +346,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     // Actions
     fetchStats,
     fetchRepeaters,
+    fetchCurrentTalker,
     fetchTalkLogs,
     connectWebSocket,
     disconnectWebSocket,

@@ -43,7 +43,10 @@
           </svg>
         </div>
         <h3 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">{{ currentTalker.callsign }}</h3>
-        <p class="text-gray-600 dark:text-gray-400 mb-4">{{ currentTalker.address }}</p>
+        <p class="text-gray-600 dark:text-gray-400 mb-2">{{ currentTalker.address }}</p>
+        <div class="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium mb-4">
+          {{ currentTalker.type === 'bridge' ? 'Bridge Talker' : 'Repeater' }}
+        </div>
         <div class="inline-flex items-center px-3 py-1 bg-warning-100 text-warning-800 rounded-full text-sm font-medium">
           <svg class="w-4 h-4 mr-1 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
             <circle cx="10" cy="10" r="3"/>
@@ -225,6 +228,7 @@ export default {
     const refreshData = () => {
       store.fetchStats()
       store.fetchRepeaters()
+      store.fetchCurrentTalker()
       store.fetchTalkLogs()
     }
 
@@ -233,15 +237,12 @@ export default {
     onMounted(() => {
       store.initialize()
 
-      // Update current talker duration every second
+      // Start periodic current talker updates to keep duration accurate
       updateInterval = setInterval(() => {
-        if (store.currentTalker && store.currentTalker.is_talking) {
-          const talker = store.repeaters.find(r => r.callsign === store.currentTalker.callsign)
-          if (talker && talker.talk_duration !== undefined) {
-            talker.talk_duration++
-          }
+        if (store.currentTalker) {
+          store.fetchCurrentTalker()
         }
-      }, 1000)
+      }, 2000) // Update every 2 seconds
     })
 
     onUnmounted(() => {

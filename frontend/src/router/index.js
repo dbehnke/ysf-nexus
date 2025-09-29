@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Dashboard from '@/views/Dashboard.vue'
 import Repeaters from '@/views/Repeaters.vue'
+import Bridges from '@/views/Bridges.vue'
 import TalkLogs from '@/views/TalkLogs.vue'
 import Settings from '@/views/Settings.vue'
 import Login from '@/views/Login.vue'
@@ -15,6 +16,11 @@ const routes = [
     path: '/repeaters',
     name: 'Repeaters',
     component: Repeaters
+  },
+  {
+    path: '/bridges',
+    name: 'Bridges',
+    component: Bridges
   },
   {
     path: '/logs',

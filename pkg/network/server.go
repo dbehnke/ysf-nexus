@@ -428,3 +428,17 @@ func hexdumpSideBySide(b []byte) string {
 	}
 	return sb.String()
 }
+
+// GetListenAddress returns the UDP address the server is listening on
+func (s *Server) GetListenAddress() *net.UDPAddr {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	
+	if s.conn == nil {
+		// If not started yet, construct address from host and port
+		addr, _ := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", s.host, s.port))
+		return addr
+	}
+	
+	return s.conn.LocalAddr().(*net.UDPAddr)
+}

@@ -41,6 +41,8 @@ type Bridge struct {
 	// Health checking
 	lastPacketTime time.Time
 	healthTicker   *time.Ticker
+	lastPingTime   time.Time
+	awaitingPong   bool
 }
 
 // NewBridge creates a new bridge instance
@@ -280,29 +282,67 @@ func (b *Bridge) calculateRetryDelay() time.Duration {
 	return jitterDelay
 }
 
-// startHealthCheck starts periodic health checking
+// startHealthCheck starts periodic health checking like a proper YSF repeater
 func (b *Bridge) startHealthCheck(ctx context.Context) {
 	if b.config.HealthCheck <= 0 {
 		return
 	}
 	
-	b.healthTicker = time.NewTicker(b.config.HealthCheck)
+	// Use a ticker with a shorter interval to check if we need to send pings
+	b.healthTicker = time.NewTicker(5 * time.Second)
 	
 	go func() {
 		defer b.healthTicker.Stop()
+		
+		// Send initial ping
+		if err := b.sendPing(); err != nil {
+			b.logger.Warn("Failed to send initial ping", logger.Error(err))
+		} else {
+			b.lastPingTime = time.Now()
+			b.awaitingPong = true
+		}
 		
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-b.healthTicker.C:
-				// Send ping packet to check connection health
-				if err := b.sendPing(); err != nil {
-					b.logger.Warn("Failed to send health check ping", logger.Error(err))
-				}
+				b.checkPingResponse(ctx)
 			}
 		}
 	}()
+}
+
+// checkPingResponse checks if we need to send a ping or handle timeout
+func (b *Bridge) checkPingResponse(ctx context.Context) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	
+	now := time.Now()
+	
+	// If we're awaiting a pong and it's been too long, consider connection lost
+	if b.awaitingPong && now.Sub(b.lastPingTime) > b.config.HealthCheck {
+		b.logger.Warn("Bridge ping timeout - no response received", 
+			logger.Duration("elapsed", now.Sub(b.lastPingTime)))
+		b.awaitingPong = false
+		// Connection might be lost, will retry on next health check cycle
+	}
+	
+	// If we're not awaiting a pong and enough time has passed, send a new ping
+	if !b.awaitingPong && now.Sub(b.lastPingTime) >= b.config.HealthCheck {
+		if err := b.sendPingLocked(); err != nil {
+			b.logger.Warn("Failed to send ping", logger.Error(err))
+		} else {
+			b.lastPingTime = now
+			b.awaitingPong = true
+		}
+	}
+}
+
+// sendPingLocked sends a ping packet (assumes mutex is already locked)
+func (b *Bridge) sendPingLocked() error {
+	ping := b.createPingPacket()
+	return b.sendPacketLocked(ping)
 }
 
 // Packet sending methods (YSF protocol specific)
@@ -348,6 +388,20 @@ func (b *Bridge) sendPacket(data []byte) error {
 	return err
 }
 
+func (b *Bridge) sendPacketLocked(data []byte) error {
+	if b.remoteAddr == nil {
+		return fmt.Errorf("bridge not connected")
+	}
+	
+	err := b.server.SendPacket(data, b.remoteAddr)
+	if err == nil {
+		b.packetsTx++
+		b.bytesTx += uint64(len(data))
+	}
+	
+	return err
+}
+
 // Packet creation methods (placeholder implementations)
 
 func (b *Bridge) createHandshakePacket() []byte {
@@ -362,8 +416,20 @@ func (b *Bridge) createKeepAlivePacket() []byte {
 }
 
 func (b *Bridge) createPingPacket() []byte {
-	// TODO: Implement YSF-specific ping packet
-	return []byte("YSFP")
+	// Create proper YSF poll packet (YSFP) - 14 bytes total
+	packet := make([]byte, 14)
+	
+	// Type: YSFP
+	copy(packet[0:4], "YSFP")
+	
+	// Callsign (padded to 10 bytes with spaces)
+	callsign := b.config.Name
+	if len(callsign) > 10 {
+		callsign = callsign[:10]
+	}
+	copy(packet[4:14], fmt.Sprintf("%-10s", callsign))
+	
+	return packet
 }
 
 func (b *Bridge) createDisconnectPacket() []byte {
@@ -423,6 +489,20 @@ func (b *Bridge) IncrementRxStats(bytes uint64) {
 	b.lastPacketTime = time.Now()
 }
 
+// OnPacketReceived handles incoming packets for ping response detection
+func (b *Bridge) OnPacketReceived(data []byte) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	
+	// Check if this is a response to our ping (any packet indicates the bridge is alive)
+	if b.awaitingPong {
+		b.awaitingPong = false
+		b.logger.Debug("Received response from bridge", 
+			logger.String("bridge", b.config.Name),
+			logger.Int("size", len(data)))
+	}
+}
+
 // ForwardPacket forwards a packet through this bridge connection
 func (b *Bridge) ForwardPacket(data []byte) error {
 	if b.state != StateConnected {
@@ -430,4 +510,18 @@ func (b *Bridge) ForwardPacket(data []byte) error {
 	}
 	
 	return b.sendPacket(data)
+}
+
+// IsConnected returns true if the bridge is currently connected
+func (b *Bridge) IsConnected() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.state == StateConnected
+}
+
+// GetRemoteAddr returns the remote address of the bridge connection
+func (b *Bridge) GetRemoteAddr() *net.UDPAddr {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.remoteAddr
 }
