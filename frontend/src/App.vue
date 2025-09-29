@@ -1,8 +1,67 @@
 <template>
   <div id="app" class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <div class="flex h-screen">
+    <!-- Mobile Header with Hamburger -->
+    <div class="lg:hidden fixed top-0 left-0 right-0 bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 px-4 py-3 z-30">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
+            <span class="text-white font-bold text-sm">YN</span>
+          </div>
+          <div>
+            <h1 class="text-lg font-bold text-gray-900 dark:text-white">YSF Nexus</h1>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2">
+          <!-- Theme Toggle for mobile -->
+          <button
+            @click="toggleTheme"
+            class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+          >
+            <svg v-if="isDark" class="w-4 h-4 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+            <svg v-else class="w-4 h-4 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+          </button>
+          <!-- Hamburger Menu Button -->
+          <button
+            @click="toggleMobileMenu"
+            class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            :title="mobileMenuOpen ? 'Close menu' : 'Open menu'"
+          >
+            <svg v-if="!mobileMenuOpen" class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            <svg v-else class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex lg:h-screen pt-16 lg:pt-0">
+      <!-- Mobile Menu Overlay -->
+      <div
+        v-if="mobileMenuOpen"
+        class="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+        @click="closeMobileMenu"
+      ></div>
+
       <!-- Sidebar -->
-      <aside class="w-64 bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700">
+      <aside 
+        :class="[
+          'w-64 bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 z-50 transition-transform duration-300 ease-in-out',
+          // Desktop: always visible and static
+          'lg:block lg:static lg:h-auto lg:transform-none',
+          // Mobile: conditionally visible, fixed position when open
+          mobileMenuOpen 
+            ? 'fixed top-16 left-0 h-[calc(100vh-4rem)] transform translate-x-0' 
+            : 'hidden lg:block'
+        ]"
+      >
         <div class="p-6">
           <div class="flex items-center justify-between">
             <div class="flex items-center space-x-3">
@@ -14,10 +73,10 @@
                 <p class="text-sm text-gray-500 dark:text-gray-400">Dashboard</p>
               </div>
             </div>
-            <!-- Theme Toggle -->
+            <!-- Theme Toggle - Desktop only -->
             <button
               @click="toggleTheme"
-              class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              class="hidden lg:block p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
             >
               <svg v-if="isDark" class="w-4 h-4 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -126,8 +185,8 @@
       </aside>
 
       <!-- Main content -->
-      <main class="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
-        <div class="p-6">
+      <main class="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-4rem)] lg:min-h-screen lg:pt-0">
+        <div class="p-4 lg:p-6">
           <router-view />
         </div>
       </main>
@@ -136,8 +195,8 @@
 </template>
 
 <script>
-import { onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, ref, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useTheme } from './composables/useTheme.js'
 import { useAuthStore } from './stores/auth.js'
 
@@ -145,14 +204,31 @@ export default {
   name: 'App',
   setup() {
     const router = useRouter()
+    const route = useRoute()
     const { isDark, toggleTheme } = useTheme()
     const authStore = useAuthStore()
+    
+    // Mobile menu state
+    const mobileMenuOpen = ref(false)
 
     const handleLogout = async () => {
       await authStore.logout()
       // Redirect to dashboard after logout
       router.push('/')
     }
+
+    const toggleMobileMenu = () => {
+      mobileMenuOpen.value = !mobileMenuOpen.value
+    }
+
+    const closeMobileMenu = () => {
+      mobileMenuOpen.value = false
+    }
+
+    // Close mobile menu when route changes
+    watch(route, () => {
+      mobileMenuOpen.value = false
+    })
 
     // Check auth status when app loads
     onMounted(() => {
@@ -163,7 +239,10 @@ export default {
       isDark,
       toggleTheme,
       authStore,
-      handleLogout
+      handleLogout,
+      mobileMenuOpen,
+      toggleMobileMenu,
+      closeMobileMenu
     }
   }
 }
