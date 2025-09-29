@@ -3,12 +3,12 @@
     <!-- Header -->
     <div class="flex justify-between items-center">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Repeaters</h1>
-        <p class="text-gray-600">Connected YSF repeaters and their status</p>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Repeaters</h1>
+        <p class="text-gray-600 dark:text-gray-400">Connected YSF repeaters and their status</p>
       </div>
       <div class="flex items-center space-x-3">
         <div class="flex items-center space-x-2">
-          <span class="text-sm text-gray-600">{{ repeaters.length }} total</span>
+          <span class="text-sm text-gray-600 dark:text-gray-400">{{ repeaters.length }} total</span>
           <span class="badge-success">{{ onlineRepeaters.length }} online</span>
         </div>
         <button @click="refreshData" :disabled="loading" class="btn-secondary">
@@ -23,39 +23,39 @@
     <!-- Repeaters Table -->
     <div class="card">
       <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead class="table-header">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="table-header-cell">
                 Status
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="table-header-cell">
                 Callsign
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="table-header-cell">
                 Address
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="table-header-cell">
                 Connected
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="table-header-cell">
                 Last Seen
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="table-header-cell">
                 Packets
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="table-header-cell">
                 Data Transfer
               </th>
             </tr>
           </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
+          <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             <tr v-if="repeaters.length === 0">
-              <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+              <td colspan="7" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                 No repeaters connected
               </td>
             </tr>
-            <tr v-for="repeater in sortedRepeaters" :key="repeater.callsign" class="hover:bg-gray-50">
+            <tr v-for="repeater in sortedRepeaters" :key="repeater.callsign" class="table-row">
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center space-x-2">
                   <div :class="getStatusClass(repeater)"></div>
@@ -64,39 +64,39 @@
                   </span>
                 </div>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap">
+              <td class="table-cell">
                 <div class="flex items-center">
                   <div>
-                    <div class="text-sm font-medium text-gray-900">{{ repeater.callsign }}</div>
+                    <div class="text-sm font-medium text-gray-900 dark:text-white">{{ repeater.callsign }}</div>
                     <div v-if="repeater.is_talking" class="text-xs text-warning-600 font-medium">
                       🎙️ Talking ({{ formatTalkDuration(repeater.talk_duration || 0) }})
                     </div>
                   </div>
                 </div>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="table-cell">
                 {{ repeater.address }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="table-cell">
                 <div>
                   {{ formatDateTime(repeater.connected) }}
                 </div>
-                <div class="text-xs text-gray-400">
+                <div class="text-xs text-gray-400 dark:text-gray-500">
                   {{ formatTimeAgo(repeater.connected) }}
                 </div>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="table-cell">
                 <div>
                   {{ formatDateTime(repeater.last_seen) }}
                 </div>
-                <div class="text-xs text-gray-400">
+                <div class="text-xs text-gray-400 dark:text-gray-500">
                   {{ formatTimeAgo(repeater.last_seen) }}
                 </div>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="table-cell">
                 {{ repeater.packet_count.toLocaleString() }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="table-cell">
                 <div>
                   <div>↓ {{ formatBytes(repeater.bytes_received) }}</div>
                   <div>↑ {{ formatBytes(repeater.bytes_transmitted) }}</div>
@@ -112,42 +112,42 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
       <div class="card">
         <div class="flex items-center">
-          <div class="w-8 h-8 bg-success-100 rounded-lg flex items-center justify-center">
-            <svg class="w-5 h-5 text-success-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-8 h-8 bg-success-100 dark:bg-success-800/20 rounded-lg flex items-center justify-center">
+            <svg class="w-5 h-5 text-success-600 dark:text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Online Repeaters</p>
-            <p class="text-xl font-semibold text-gray-900">{{ onlineRepeaters.length }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Online Repeaters</p>
+            <p class="text-xl font-semibold text-gray-900 dark:text-white">{{ onlineRepeaters.length }}</p>
           </div>
         </div>
       </div>
 
       <div class="card">
         <div class="flex items-center">
-          <div class="w-8 h-8 bg-warning-100 rounded-lg flex items-center justify-center">
-            <svg class="w-5 h-5 text-warning-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-8 h-8 bg-warning-100 dark:bg-warning-800/20 rounded-lg flex items-center justify-center">
+            <svg class="w-5 h-5 text-warning-600 dark:text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Currently Talking</p>
-            <p class="text-xl font-semibold text-gray-900">{{ activeTalkers.length }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Currently Talking</p>
+            <p class="text-xl font-semibold text-gray-900 dark:text-white">{{ activeTalkers.length }}</p>
           </div>
         </div>
       </div>
 
       <div class="card">
         <div class="flex items-center">
-          <div class="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
-            <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-8 h-8 bg-primary-100 dark:bg-primary-800/20 rounded-lg flex items-center justify-center">
+            <svg class="w-5 h-5 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">Total Packets</p>
-            <p class="text-xl font-semibold text-gray-900">{{ totalPackets.toLocaleString() }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Packets</p>
+            <p class="text-xl font-semibold text-gray-900 dark:text-white">{{ totalPackets.toLocaleString() }}</p>
           </div>
         </div>
       </div>

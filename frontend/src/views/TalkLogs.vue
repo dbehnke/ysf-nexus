@@ -7,7 +7,7 @@
         <p class="text-gray-600 dark:text-gray-400">History of voice transmissions</p>
       </div>
       <div class="flex items-center space-x-3">
-        <select v-model="selectedLimit" @change="fetchLogs" class="rounded-md border-gray-300 text-sm">
+        <select v-model="selectedLimit" @change="fetchLogs" class="form-select text-sm">
           <option value="50">50 logs</option>
           <option value="100">100 logs</option>
           <option value="250">250 logs</option>
@@ -100,8 +100,8 @@
           />
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Time Range</label>
-          <select v-model="timeFilter" class="rounded-md border-gray-300 text-sm">
+          <label class="form-label">Time Range</label>
+          <select v-model="timeFilter" class="form-select text-sm">
             <option value="all">All time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -110,8 +110,8 @@
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Min Duration</label>
-          <select v-model="durationFilter" class="rounded-md border-gray-300 text-sm">
+          <label class="form-label">Min Duration</label>
+          <select v-model="durationFilter" class="form-select text-sm">
             <option value="0">All durations</option>
             <option value="5">5+ seconds</option>
             <option value="10">10+ seconds</option>
@@ -130,43 +130,43 @@
     <!-- Talk Logs Table -->
     <div class="card">
       <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead class="table-header">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="table-header-cell">
                 Callsign
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="table-header-cell">
                 Start Time
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="table-header-cell">
                 Duration
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="table-header-cell">
                 Time Ago
               </th>
             </tr>
           </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
+          <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             <tr v-if="filteredLogs.length === 0">
-              <td colspan="4" class="px-6 py-12 text-center text-gray-500">
+              <td colspan="4" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                 {{ talkLogs.length === 0 ? 'No talk logs available' : 'No logs match your filters' }}
               </td>
             </tr>
-            <tr v-for="log in paginatedLogs" :key="log.id" class="hover:bg-gray-50">
-              <td class="px-6 py-4 whitespace-nowrap">
+            <tr v-for="log in paginatedLogs" :key="log.id" class="table-row">
+              <td class="table-cell">
                 <div class="flex items-center">
                   <div class="w-2 h-2 bg-success-500 rounded-full mr-3"></div>
-                  <div class="text-sm font-medium text-gray-900">{{ log.callsign }}</div>
+                  <div class="text-sm font-medium text-gray-900 dark:text-white">{{ log.callsign }}</div>
                 </div>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="table-cell">
                 {{ formatDateTime(log.timestamp) }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap">
+              <td class="table-cell">
                 <span class="badge-gray">{{ formatDuration(log.duration) }}</span>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+              <td class="table-cell">
                 {{ formatTimeAgo(log.timestamp) }}
               </td>
             </tr>
@@ -175,8 +175,8 @@
       </div>
 
       <!-- Pagination -->
-      <div v-if="filteredLogs.length > pageSize" class="flex items-center justify-between px-6 py-3 border-t border-gray-200 bg-gray-50">
-        <div class="text-sm text-gray-700">
+      <div v-if="filteredLogs.length > pageSize" class="flex items-center justify-between px-6 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
+        <div class="text-sm text-gray-700 dark:text-gray-300">
           Showing {{ (currentPage - 1) * pageSize + 1 }} to {{ Math.min(currentPage * pageSize, filteredLogs.length) }} of {{ filteredLogs.length }} results
         </div>
         <div class="flex space-x-2">
