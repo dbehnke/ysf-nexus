@@ -55,7 +55,7 @@
                 No repeaters connected
               </td>
             </tr>
-            <tr v-for="repeater in sortedRepeaters" :key="repeater.callsign" class="table-row">
+            <tr v-for="repeater in sortedRepeaters" :key="`${repeater.callsign}-${repeater.address}`" class="table-row">
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center space-x-2">
                   <div :class="getStatusClass(repeater)"></div>
