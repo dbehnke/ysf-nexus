@@ -19,13 +19,11 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: Install Dagger CLI (optional)
+      - name: Install Dagger CLI
         run: |
-          if ! command -v dagger >/dev/null 2>&1; then
-            echo "Installing Dagger CLI"
-            curl -fsSL https://dl.dagger.io/dagger/install.sh | sh -s -- -b $RUNNER_TEMP
-            echo "$RUNNER_TEMP" >> $GITHUB_PATH
-          fi
+          echo "Installing Dagger CLI"
+          curl -fsSL https://dl.dagger.io/dagger/install.sh | sh
+          sudo mv ./bin/dagger /usr/local/bin/dagger
 
       - name: Run Dagger CI Pipeline
         run: |
