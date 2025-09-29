@@ -55,7 +55,7 @@ func (m *YsfNexus) Vuln(ctx context.Context, source *dagger.Directory) (string, 
 func (m *YsfNexus) Build(source *dagger.Directory) *dagger.File {
 	return m.Base(source).
 		WithExec([]string{"go", "build", "-o", "ysf-nexus", "./cmd/ysf-nexus"}).
-		File("/src/ysf-nexus/ysf-nexus")
+		File("/src/ysf-nexus")
 }
 
 // CI runs the complete CI pipeline (test, lint, vuln check)
