@@ -31,4 +31,5 @@ jobs:
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: |
-          go run ./dagger/pipeline
+          cd dagger/pipeline
+          go run .

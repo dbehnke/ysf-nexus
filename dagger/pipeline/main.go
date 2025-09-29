@@ -17,8 +17,10 @@ func main() {
 	}
 	defer c.Close()
 
-	// Use the repo as the build context
-	src := c.Host().Directory(".")
+	// Use the repository root as the build context. When this program is
+	// executed from the dagger/pipeline directory (as the CI workflow does),
+	// the repo root is two levels up.
+	src := c.Host().Directory("../..")
 
 	// Base image with Go installed
 	golang := c.Container().From("golang:1.25")
