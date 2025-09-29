@@ -2,7 +2,7 @@ name: Go tests
 
 on:
   push:
-    branches: [ main, 'fix/openspot-status-response' ]
+    branches: [ main, 'pr/*', 'fix/*', 'pr/fix/*', 'pr/fix/openspot-status-response-clean' ]
   pull_request:
     branches: [ main ]
 

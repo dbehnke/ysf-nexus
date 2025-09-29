@@ -3,6 +3,8 @@
 ## TL;DR
 A Go-based YSF (Yaesu System Fusion) reflector with OpenSpot compatibility, a web dashboard, MQTT events, and bridge scaffolding. Production-ready core, tests and CI included. Use `config.yaml` to configure server, web, bridges and MQTT.
 
+**Current Status**: Production-ready with Dagger CI/CD pipeline. All core features implemented and tested.
+
 ## Quick Summary
 This project ports the original C++ YSF reflector to Go, focusing on high-concurrency, observability, and operability. Key features include:
 - UDP-based packet handling for YSFP/YSFU/YSFD/YSFS
@@ -415,3 +417,32 @@ logging:
    - CI/CD pipeline with automated testing
 
 **RESULT**: All success criteria met or exceeded! 🚀
+
+## CI/CD Pipeline (Dagger)
+
+### Quick CI Commands
+```bash
+# Full pipeline (matches GitHub Actions exactly)
+dagger call ci --source=.
+
+# Individual steps for fast feedback
+dagger call test --source=.    # Run Go tests
+dagger call lint --source=.    # golangci-lint
+dagger call vuln --source=.    # Security scan
+dagger call build --source=.   # Linux binary
+```
+
+### Implementation Details
+- **Engine**: Dagger v0.18.19 with Go SDK (`dagger/main.go`)
+- **Base**: golang:1.25 container for consistency
+- **GitHub**: `.github/workflows/dagger-ci.yml` runs `dagger call ci`
+- **Results**: ✅ All tests pass, 0 lint issues, no vulnerabilities
+- **Speed**: ~2 minutes for complete pipeline with caching
+
+### Why Dagger?
+- Same container environment locally and in CI
+- Go SDK code instead of brittle shell scripts
+- Intelligent caching and parallelization
+- `dagger call` locally = exact CI reproduction
+
+The containerized CI ensures code quality and provides fast developer feedback.

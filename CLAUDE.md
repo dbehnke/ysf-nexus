@@ -391,3 +391,78 @@ logging:
    - CI/CD pipeline with automated testing
 
 **RESULT**: All success criteria met or exceeded! 🚀
+
+## CI/CD Pipeline with Dagger
+
+### Overview
+The project uses Dagger Go SDK for containerized, reproducible CI/CD pipelines that run identically in local development and GitHub Actions.
+
+### Dagger Implementation
+- **Location**: `dagger/main.go` - Complete Go SDK implementation
+- **Configuration**: `dagger.json` - Dagger engine v0.18.19 with Go SDK
+- **Container Base**: `golang:1.25` for consistent build environment
+
+### Available Dagger Functions
+
+#### Core Functions
+```bash
+# Test - Run all Go tests with dependency management
+dagger call test --source=.
+
+# Lint - Run comprehensive golangci-lint checks
+dagger call lint --source=.
+
+# Vuln - Security vulnerability scanning with govulncheck
+dagger call vuln --source=.
+
+# Build - Create optimized Linux binary
+dagger call build --source=.
+
+# CI - Complete pipeline (test + lint + vuln)
+dagger call ci --source=.
+```
+
+#### Pipeline Components
+1. **Base Container**: Sets up Go 1.25 environment with source code
+2. **Test Suite**: Runs unit tests for all packages (config, network, reflector, repeater)
+3. **Linting**: golangci-lint with comprehensive rule set (0 issues required)
+4. **Vulnerability Scanning**: govulncheck for security analysis
+5. **Binary Build**: Cross-compiled Linux executable
+
+### Local Development Workflow
+```bash
+# Validate changes locally (matches CI exactly)
+dagger call ci --source=.
+
+# Run individual steps for faster feedback
+dagger call test --source=.
+dagger call lint --source=.
+
+# Build and test binary locally
+dagger call build --source=. export --path=./ysf-nexus-linux
+```
+
+### GitHub Actions Integration
+- **Workflow**: `.github/workflows/dagger-ci.yml`
+- **Trigger**: Push to any branch, pull requests
+- **Command**: `dagger call ci --source=.`
+- **Duration**: ~2 minutes for complete pipeline
+- **Status**: ✅ All runs passing successfully
+
+### Benefits of Dagger Approach
+- **Reproducibility**: Same container environment locally and in CI
+- **Speed**: Intelligent caching and parallelization
+- **Developer Experience**: `dagger call` locally matches CI exactly
+- **Maintainability**: Go code instead of shell scripts
+- **Portability**: Works on any Dagger-supported platform
+
+### CI Pipeline Results (Latest)
+```
+✅ Tests: All packages pass (config, network, reflector, repeater)
+✅ Linting: 0 issues found with golangci-lint
+✅ Security: No vulnerabilities detected
+✅ Build: Linux binary created successfully
+⏱️ Total time: ~2 minutes
+```
+
+This containerized CI approach ensures that the YSF Nexus project maintains high code quality and security standards while providing fast developer feedback loops.

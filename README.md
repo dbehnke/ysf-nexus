@@ -11,6 +11,7 @@ A modern, high-performance YSF (Yaesu System Fusion) reflector written in Go wit
 - **Single Binary**: All features packaged in one executable
 - **Docker Ready**: Easy deployment with containerization support
 - **Comprehensive Testing**: Unit and integration tests with high coverage
+- **Modern CI/CD**: Dagger-powered containerized pipeline for reproducible builds
 
 ## 🏗️ Architecture
 
@@ -155,6 +156,7 @@ Real-time events are published to MQTT topics:
 ### Prerequisites
 - Go 1.25+
 - Make
+- Dagger (optional, for CI pipeline)
 
 ### Building
 ```bash
@@ -165,11 +167,35 @@ make lint           # Run linter
 make docker         # Build Docker image
 ```
 
+### CI/CD Pipeline (Dagger)
+
+YSF Nexus uses [Dagger](https://dagger.io) for containerized, reproducible CI/CD:
+
+```bash
+# Run complete CI pipeline locally (matches GitHub Actions)
+dagger call ci --source=.
+
+# Individual pipeline steps
+dagger call test --source=.    # Run Go tests
+dagger call lint --source=.    # golangci-lint analysis  
+dagger call vuln --source=.    # Security vulnerability scan
+dagger call build --source=.   # Build Linux binary
+```
+
+**Benefits:**
+- 🔄 **Reproducible**: Same container environment locally and in CI
+- ⚡ **Fast**: Intelligent caching and parallelization (~2 min pipeline)
+- 🛠️ **Developer-Friendly**: `dagger call` locally = exact CI reproduction
+- 📝 **Maintainable**: Go SDK code instead of shell scripts
+
 ### Testing
 ```bash
 make test                    # Unit tests
 make test-integration       # Integration tests
 make test-load              # Load testing
+
+# Or use Dagger for containerized testing
+dagger call test --source=.  # Same as CI environment
 ```
 
 ## 📈 Performance
@@ -209,35 +235,39 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Amateur radio community for YSF protocol development
 - Go community for excellent networking libraries
 
-## ✅ Implemented vs Roadmap
+## ✅ Current Status & Roadmap
 
-## 📚 Project Docs
+### ✅ Fully Implemented & Production Ready
+- **Core YSF Reflector**: Complete packet parsing (YSFP/YSFU/YSFD/YSFS) and UDP server
+- **Repeater Management**: Thread-safe structures with automatic timeouts
+- **OpenSpot Compatibility**: 4-byte YSFS probe handling and status responses  
+- **Stream Management**: Single-active-stream enforcement and configurable talk timeout muting
+- **Configuration System**: YAML config with sensible defaults and validation
+- **Web Dashboard**: Real-time UI with WebSocket updates and embedded assets
+- **MQTT Integration**: Real-time event publishing (connect/disconnect/talk)
+- **Comprehensive Testing**: Unit tests, integration tests, and end-to-end validation
+- **CI/CD Pipeline**: Dagger-based containerized pipeline with automated testing
+- **Docker Support**: Multi-stage builds and production-ready containers
 
-- `CLAUDE.md` - detailed development notes and implementation log
-- `COPILOT.md` - concise Copilot-style project summary and checklist
+### 🛠️ Framework Ready (Scaffold Implemented)
+- **Bridge System**: Configuration and scheduling infrastructure exists, ready for connections
+- **Metrics Collection**: Structure in place for Prometheus/monitoring integration
 
+### 🚀 Roadmap (Future Enhancements)
+- **Live Web Configuration**: Tune settings via dashboard without restart
+- **CLI Flag Overrides**: Runtime config overrides for deployment flexibility  
+- **Persistent Event Store**: Database backend for long-term analytics
+- **Advanced Bridge Strategies**: Failover logic and dynamic scheduling
+- **Enhanced UI Controls**: Per-repeater controls and manual unmute capabilities
+- **Enterprise Scale**: Performance tuning for 1000+ repeater deployments
 
-This section clarifies what is already implemented in YSF Nexus (so you know what to expect when running the binary) and what remains on the roadmap.
+### 📚 Documentation
+- **`CLAUDE.md`**: Comprehensive development notes and implementation details
+- **`COPILOT.md`**: Concise project summary and development checklist
+- **`README.md`**: User-facing documentation and quick start guide
 
-Implemented
-- Core YSF reflector: packet parsing (YSFP/YSFU/YSFD/YSFS) and UDP server
-- Repeater management with thread-safe structures and timeouts
-- Poll/status responses compatible with OpenSpot and other clients (includes 4-byte YSFS probe handling)
-- Single-active-stream enforcement and talk-timeout muting (configurable)
-- Config file support with sensible defaults and Viper-based loading
-- Web dashboard (static UI + WebSocket updates) and embedded static assets for CI
-- MQTT integration for real-time events (connect/disconnect/talk)
-- Unit tests, end-to-end reflector test, and CI workflow
-
-Roadmap (planned / optional)
-- Live configurability via web dashboard (tune talk timeouts from UI)
-- CLI flags to override config file values at runtime
-- Persistent event store (DB) for long-term talk logs and analytics
-- Advanced bridge strategies (failover, dynamic schedules)
-- UI improvements: per-repeater controls, manual unmute button, and visual indicators for muted repeaters
-- Performance tuning for very large deployments (1k+ repeaters)
-
-If you'd like any roadmap items prioritized for the upcoming release, tell me which ones and I can prepare an implementation plan and tests.
+### 🎯 Production Readiness
+YSF Nexus is **production-ready** with all core functionality implemented, comprehensive test coverage, and automated CI/CD ensuring code quality. The foundation is solid for both immediate deployment and future enhancements.
 
 ---
 

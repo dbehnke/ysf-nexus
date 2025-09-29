@@ -22,8 +22,15 @@ jobs:
       - name: Install Dagger CLI
         run: |
           echo "Installing Dagger CLI"
-          curl -fsSL https://dl.dagger.io/dagger/install.sh | sh
-          sudo mv ./bin/dagger /usr/local/bin/dagger
+          DAGGER_VERSION="v0.18.19"
+          # Download from GitHub releases (more secure than install script)
+          curl -fsSL "https://github.com/dagger/dagger/releases/download/${DAGGER_VERSION}/dagger_${DAGGER_VERSION}_linux_amd64.tar.gz" -o dagger.tar.gz
+          # Verify it's a valid tar.gz file
+          file dagger.tar.gz | grep -q "gzip compressed data"
+          tar -xzf dagger.tar.gz dagger
+          chmod +x dagger
+          sudo mv dagger /usr/local/bin/dagger
+          dagger version
 
       - name: Run Dagger CI Pipeline
         run: |
