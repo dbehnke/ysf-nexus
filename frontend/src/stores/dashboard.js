@@ -139,7 +139,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         break
 
       case 'repeater_update':
-        const index = repeaters.value.findIndex(r => r.callsign === data.data.callsign)
+        const index = repeaters.value.findIndex(r => r.callsign === data.data.callsign && r.address === data.data.address)
         if (index !== -1) {
           repeaters.value[index] = { ...repeaters.value[index], ...data.data }
         } else {
@@ -149,7 +149,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
       case 'repeater_connect':
         // Add new repeater if not already in the list
-        const existingIndex = repeaters.value.findIndex(r => r.callsign === data.data.callsign)
+        const existingIndex = repeaters.value.findIndex(r => r.callsign === data.data.callsign && r.address === data.data.address)
         if (existingIndex === -1) {
           // Need to fetch the full repeater data since connect event only has callsign/address
           fetchRepeaters()
@@ -157,14 +157,21 @@ export const useDashboardStore = defineStore('dashboard', () => {
         break
 
       case 'repeater_disconnect':
-        const disconnectIndex = repeaters.value.findIndex(r => r.callsign === data.data.callsign)
+        const disconnectIndex = repeaters.value.findIndex(r => r.callsign === data.data.callsign && r.address === data.data.address)
         if (disconnectIndex !== -1) {
           repeaters.value.splice(disconnectIndex, 1)
         }
         break
 
       case 'talk_start':
-        const startTalker = repeaters.value.find(r => r.callsign === data.data.callsign)
+        // Find the correct repeater - prefer by callsign+address if available, fallback to callsign only
+        let startTalker
+        if (data.data.address) {
+          startTalker = repeaters.value.find(r => r.callsign === data.data.callsign && r.address === data.data.address)
+        } else {
+          startTalker = repeaters.value.find(r => r.callsign === data.data.callsign)
+        }
+        
         if (startTalker) {
           startTalker.is_talking = true
           startTalker.talk_start_time = new Date(data.data.timestamp)
@@ -175,7 +182,14 @@ export const useDashboardStore = defineStore('dashboard', () => {
         break
 
       case 'talk_end':
-        const endTalker = repeaters.value.find(r => r.callsign === data.data.callsign)
+        // Find the correct repeater - prefer by callsign+address if available, fallback to callsign only
+        let endTalker
+        if (data.data.address) {
+          endTalker = repeaters.value.find(r => r.callsign === data.data.callsign && r.address === data.data.address)
+        } else {
+          endTalker = repeaters.value.find(r => r.callsign === data.data.callsign)
+        }
+        
         if (endTalker) {
           endTalker.is_talking = false
         }
@@ -185,7 +199,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
         // Clear current talker if it was this one
         if (currentTalker.value && currentTalker.value.callsign === data.data.callsign) {
-          currentTalker.value = null
+          // If address is available, also check address match
+          if (!data.data.address || currentTalker.value.address === data.data.address) {
+            currentTalker.value = null
+          }
         }
 
         // Stop timers if no one is talking
