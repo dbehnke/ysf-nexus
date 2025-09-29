@@ -32,4 +32,6 @@ jobs:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: |
           cd dagger/pipeline
+          # ensure module checksums are populated in CI (avoid missing go.sum entries)
+          go mod tidy
           go run .
