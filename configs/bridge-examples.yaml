@@ -1,0 +1,100 @@
+# Enhanced YSF Nexus Bridge Configuration Examples
+# This file demonstrates the new bridge system capabilities
+
+# Example 1: Permanent Bridge Configuration
+# A permanent bridge stays connected 24/7 with auto-reconnection
+bridges:
+  - name: "permanent-bridge-west"
+    host: "reflector-west.example.com"
+    port: 4200
+    enabled: true
+    permanent: true                # This bridge runs continuously
+    max_retries: 0                # 0 = infinite retries (recommended for permanent)
+    retry_delay: "30s"            # Start with 30-second retry delay
+    health_check: "60s"           # Check connection health every minute
+
+# Example 2: Scheduled Bridge Configuration  
+# A scheduled bridge runs only during specific time windows
+  - name: "scheduled-evening-net"
+    host: "net-reflector.example.com"
+    port: 4200
+    enabled: true
+    permanent: false
+    schedule: "0 0 19 * * *"      # Daily at 7 PM (cron format: sec min hour day month dow)
+    duration: "2h"                # Run for 2 hours
+    max_retries: 5                # Limit retries during scheduled window
+    retry_delay: "10s"            # Faster retries for scheduled bridges
+    health_check: "30s"           # More frequent health checks
+
+# Example 3: Weekend-Only Bridge
+# Connects only on weekends for special events
+  - name: "weekend-special"
+    host: "weekend.ysfreflector.org"
+    port: 4200
+    enabled: true
+    permanent: false
+    schedule: "0 0 9 * * 6,0"     # Saturdays and Sundays at 9 AM
+    duration: "8h"                # Run for 8 hours
+    max_retries: 3
+    retry_delay: "20s"
+    health_check: "45s"
+
+# Example 4: High-Frequency Connection Bridge
+# For reflectors that need frequent but short connections
+  - name: "hourly-sync"
+    host: "sync.repeaternetwork.net"
+    port: 4200
+    enabled: true
+    permanent: false
+    schedule: "0 0 * * * *"       # Every hour on the hour
+    duration: "5m"                # Connect for 5 minutes each hour
+    max_retries: 2                # Quick failure for short windows
+    retry_delay: "5s"             # Fast retries
+    health_check: "15s"           # Frequent health checks
+
+# Bridge System Features Explained:
+
+# 1. PERMANENT BRIDGES (permanent: true)
+#    - Ignore schedule/duration settings
+#    - Maintain constant connection with auto-reconnection
+#    - Ideal for: Main interconnections, backup links, primary network links
+#    - Retry behavior: Exponential backoff with configurable max retries
+
+# 2. SCHEDULED BRIDGES (permanent: false + schedule)
+#    - Run only during specified time windows
+#    - Support full cron expression format (seconds resolution)
+#    - Missed schedule recovery: If system restarts during schedule window, 
+#      bridge will automatically start if still within duration window
+#    - Ideal for: Scheduled nets, event-specific connections, time-limited links
+
+# 3. RETRY LOGIC
+#    - Exponential backoff: delay doubles with each retry (with jitter)
+#    - max_retries: 0 = infinite, >0 = limited retries
+#    - retry_delay: Initial delay, caps at 10 minutes maximum
+#    - Failed bridges stop retrying after max attempts reached
+
+# 4. HEALTH MONITORING  
+#    - health_check: How often to send keep-alive/ping packets
+#    - Automatic disconnection if no traffic received for 2x health_check interval
+#    - Connection quality monitoring and statistics tracking
+
+# 5. SCHEDULE RECOVERY
+#    - System automatically detects missed schedules on startup
+#    - If current time is within a scheduled window, bridge starts immediately  
+#    - Prevents missed connections due to system restarts or downtime
+
+# 6. CRON SCHEDULE FORMAT
+#    Format: "second minute hour day month dayofweek"
+#    Examples:
+#    - "0 0 12 * * *"     = Daily at noon
+#    - "0 30 8 * * 1-5"   = Weekdays at 8:30 AM  
+#    - "0 0 20 * * 6"     = Saturdays at 8 PM
+#    - "0 */15 * * * *"   = Every 15 minutes
+#    - "0 0 6,18 * * *"   = Twice daily at 6 AM and 6 PM
+
+# Integration Notes:
+# - Bridge system integrates with existing YSF packet routing
+# - Bridges appear in web dashboard with real-time status
+# - Bridge connections are logged and monitored  
+# - MQTT integration broadcasts bridge status changes
+# - Bridge statistics tracked: packets/bytes TX/RX, connection uptime
