@@ -27,9 +27,14 @@ jobs:
           curl -fsSL "https://github.com/dagger/dagger/releases/download/${DAGGER_VERSION}/dagger_${DAGGER_VERSION}_linux_amd64.tar.gz" -o dagger.tar.gz
           # Verify it's a valid tar.gz file
           file dagger.tar.gz | grep -q "gzip compressed data"
-          tar -xzf dagger.tar.gz dagger
-          chmod +x dagger
-          sudo mv dagger /usr/local/bin/dagger
+          # Extract into a temporary directory to avoid conflicts if a file named 'dagger' exists
+          TMPDIR=$(mktemp -d)
+          tar -xzf dagger.tar.gz -C "${TMPDIR}"
+          if [ ! -x "${TMPDIR}/dagger" ]; then
+            chmod +x "${TMPDIR}/dagger" || true
+          fi
+          sudo mv -f "${TMPDIR}/dagger" /usr/local/bin/dagger
+          rm -rf "${TMPDIR}"
           dagger version
 
       - name: Run Dagger CI Pipeline
