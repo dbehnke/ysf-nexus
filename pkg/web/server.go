@@ -48,6 +48,8 @@ type Server struct {
 	talkLogs        []TalkLogEntry
 	websocketHub    *WebSocketHub
 	startTime       time.Time
+	version         string
+	buildTime       string
 	mu              sync.RWMutex
 	running         bool
 	sessions        map[string]time.Time // session token -> expiry time
@@ -85,7 +87,7 @@ var upgrader = websocket.Upgrader{
 }
 
 // NewServer creates a new web server
-func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager, eventChan <-chan repeater.Event, bridgeManager interface{}, reflector interface{}) *Server {
+func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager, eventChan <-chan repeater.Event, bridgeManager interface{}, reflector interface{}, version, buildTime string) *Server {
 	hub := &WebSocketHub{
 		clients:    make(map[*websocket.Conn]bool),
 		broadcast:  make(chan []byte, 256),
@@ -105,6 +107,8 @@ func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager
 		talkLogs:        make([]TalkLogEntry, 0),
 		websocketHub:    hub,
 		startTime:       time.Now(),
+		version:         version,
+		buildTime:       buildTime,
 		sessions:        make(map[string]time.Time),
 	}
 }
@@ -691,8 +695,8 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"name":           s.config.Server.Name,
 		"description":    s.config.Server.Description,
-		"version":        "dev", // This would come from build info
-		"buildTime":      "unknown",
+		"version":        s.version,
+		"buildTime":      s.buildTime,
 		"host":           s.config.Server.Host,
 		"port":           s.config.Server.Port,
 		"maxConnections": s.config.Server.MaxConnections,

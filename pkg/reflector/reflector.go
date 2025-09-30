@@ -51,7 +51,9 @@ type Reflector struct {
 	eventChan       chan repeater.Event
 	running         bool
 	mu              sync.RWMutex
-	
+	version         string
+	buildTime       string
+
 	// Bridge talker tracking
 	bridgeTalkers   map[string]*bridgeTalker // key: callsign+bridge_name
 	talkersMu       sync.RWMutex
@@ -59,6 +61,11 @@ type Reflector struct {
 
 // New creates a new YSF reflector
 func New(cfg *config.Config, log *logger.Logger) *Reflector {
+	return NewWithVersion(cfg, log, "dev", "unknown")
+}
+
+// NewWithVersion creates a new YSF reflector with version information
+func NewWithVersion(cfg *config.Config, log *logger.Logger, version, buildTime string) *Reflector {
 	eventChan := make(chan repeater.Event, 1000)
 
 	r := &Reflector{
@@ -66,6 +73,8 @@ func New(cfg *config.Config, log *logger.Logger) *Reflector {
 		logger:        log.WithComponent("reflector"),
 		eventChan:     eventChan,
 		bridgeTalkers: make(map[string]*bridgeTalker),
+		version:       version,
+		buildTime:     buildTime,
 	}
 
 	// Initialize network server
@@ -86,7 +95,7 @@ func New(cfg *config.Config, log *logger.Logger) *Reflector {
 	r.bridgeManager = bridge.NewManager(cfg.Bridges, r.server, r.logger)
 
 	// Initialize web server
-	r.webServer = web.NewServer(cfg, log, r.repeaterManager, eventChan, r.bridgeManager, r)
+	r.webServer = web.NewServer(cfg, log, r.repeaterManager, eventChan, r.bridgeManager, r, version, buildTime)
 
 	// Set up blocklist if configured
 	if cfg.Blocklist.Enabled && len(cfg.Blocklist.Callsigns) > 0 {

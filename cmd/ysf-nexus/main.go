@@ -88,7 +88,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		logger.String("config_file", configFile))
 
 	// Create and start reflector
-	r := reflector.New(cfg, log)
+	r := reflector.NewWithVersion(cfg, log, Version, BuildTime)
 
 	// Setup context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
