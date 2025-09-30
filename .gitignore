@@ -62,3 +62,10 @@ frontend/node_modules/
 frontend/dist/
 pkg/web/dist/*
 !pkg/web/dist/index.html
+
+# Local run-time config (do not commit)
+configs/local-test-loopback.yaml
+
+# Built tool binaries (local build artifacts)
+internal/tools/bridge_sender/bridge_sender
+internal/tools/ws_client/ws_client
