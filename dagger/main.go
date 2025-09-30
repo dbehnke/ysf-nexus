@@ -41,8 +41,10 @@ func (m *YsfNexus) Lint(ctx context.Context, source *dagger.Directory) (string, 
 		// Use the project's Makefile to install and run linting tools so behavior
 		// matches CI and local development (`make install-tools` installs pinned
 		// tool versions, `make lint` runs golangci-lint).
-		WithExec([]string{"make", "install-tools"}).
-		WithExec([]string{"make", "lint"}).
+	WithExec([]string{"make", "install-tools"}).
+	// Ensure the Go bin dir is on PATH so tools installed via `go install`
+	// are discoverable (e.g. golangci-lint).
+	WithExec([]string{"sh", "-lc", "export PATH=$(go env GOPATH)/bin:$PATH && make lint"}).
 		Stdout(ctx)
 }
 
@@ -51,8 +53,10 @@ func (m *YsfNexus) Vuln(ctx context.Context, source *dagger.Directory) (string, 
 	return m.Base(source).
 		// Install dev tools via Makefile (includes govulncheck) then run the
 		// vulnerability scanner from the module root.
-		WithExec([]string{"make", "install-tools"}).
-		WithExec([]string{"sh", "-lc", "govulncheck ./..."}).
+	WithExec([]string{"make", "install-tools"}).
+	// Make sure govulncheck (installed to GOPATH/bin by `go install`) is on PATH
+	// before invoking it.
+	WithExec([]string{"sh", "-lc", "export PATH=$(go env GOPATH)/bin:$PATH && govulncheck ./..."}).
 		Stdout(ctx)
 }
 
