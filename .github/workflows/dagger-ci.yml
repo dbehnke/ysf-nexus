@@ -42,7 +42,7 @@ jobs:
           dagger help >/dev/null
           # Try a minimal invocation of the local module; this should return non-error quickly
           # If the module isn't available, this will still validate the CLI runtime
-          dagger --version >/dev/null
+          dagger version >/dev/null
 
       - name: Dagger module smoke invocation
         run: |
