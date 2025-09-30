@@ -38,6 +38,7 @@ func TestBridgeManager_PermanentBridge(t *testing.T) {
 			Name:       "test-permanent",
 			Host:       "localhost",
 			Port:       4200,
+			Enabled:    true,
 			Permanent:  true,
 			MaxRetries: 3,
 			RetryDelay: 1 * time.Second,
@@ -85,6 +86,7 @@ func TestBridgeManager_ScheduledBridge(t *testing.T) {
 			Name:     "test-scheduled",
 			Host:     "localhost",
 			Port:     4200,
+			Enabled:  true,
 			Schedule: "* * * * * *", // Every second
 			Duration: 2 * time.Second,
 		},

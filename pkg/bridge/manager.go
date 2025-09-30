@@ -101,6 +101,12 @@ func (m *Manager) Start() error {
 	m.logger.Info("Starting bridge manager")
 
 	for _, bridgeConfig := range m.config {
+		// Skip disabled bridges
+		if !bridgeConfig.Enabled {
+			m.logger.Info("Skipping disabled bridge", logger.String("name", bridgeConfig.Name))
+			continue
+		}
+
 		if err := m.setupBridge(bridgeConfig); err != nil {
 			m.logger.Error("Failed to setup bridge",
 				logger.String("name", bridgeConfig.Name),
