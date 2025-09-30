@@ -1,0 +1,43 @@
+name: Auto-release on successful Dagger CI
+
+on:
+  workflow_run:
+    workflows: ["Dagger CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  create_release:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create GitHub release for branch
+        uses: actions/github-script@v6
+        env:
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          script: |
+            const branch = process.env.HEAD_BRANCH || 'unknown-branch'
+            const sha = (process.env.HEAD_SHA || '').slice(0,7)
+            // sanitize branch name (replace slashes with dashes)
+            const safeBranch = branch.replace(/\//g, '-')
+            const tag = `release-${safeBranch}-${sha}`
+            const name = `Automated release for ${branch} @ ${sha}`
+            const body = `Automated prerelease created after successful Dagger CI run for branch **${branch}**.\n\nCommit: ${process.env.HEAD_SHA}\n\nThis release was created automatically.`
+            const resp = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: name,
+              body: body,
+              target_commitish: process.env.HEAD_SHA,
+              draft: false,
+              prerelease: true,
+            })
+            core.info(`Created release: ${resp.data.html_url}`)
