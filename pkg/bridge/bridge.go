@@ -239,9 +239,9 @@ func (b *Bridge) disconnect() {
 	if b.state == StateConnected {
 		b.logger.Info("Disconnecting bridge")
 
-		// Send disconnect packet
+		// Send disconnect packet using sendDisconnectLocked to avoid double-lock
 		if b.remoteAddr != nil {
-			if err := b.sendDisconnect(); err != nil {
+			if err := b.sendDisconnectLocked(); err != nil {
 				b.logger.Warn("Failed to send disconnect packet", logger.Error(err))
 			}
 		}
@@ -380,6 +380,12 @@ func (b *Bridge) sendDisconnect() error {
 	// Create YSF disconnect packet
 	disconnect := b.createDisconnectPacket()
 	return b.sendPacket(disconnect)
+}
+
+func (b *Bridge) sendDisconnectLocked() error {
+	// Create YSF disconnect packet
+	disconnect := b.createDisconnectPacket()
+	return b.sendPacketLocked(disconnect)
 }
 
 func (b *Bridge) sendPacket(data []byte) error {

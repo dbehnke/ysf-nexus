@@ -156,26 +156,68 @@ func TestBridge_ConnectionRetry(t *testing.T) {
 func TestBridge_Statistics(t *testing.T) {
 	logger := logger.NewTestLogger(os.Stdout)
 	mockServer := &MockNetworkServer{}
-	
+
 	config := config.BridgeConfig{
 		Name: "test-stats",
 		Host: "localhost",
 		Port: 4200,
 	}
-	
+
 	bridge := NewBridge(config, mockServer, logger)
-	
+
 	// Simulate receiving packets
 	bridge.IncrementRxStats(100)
 	bridge.IncrementRxStats(200)
-	
+
 	status := bridge.GetStatus()
-	
+
 	if status.PacketsRx != 2 {
 		t.Errorf("Expected 2 RX packets, got %d", status.PacketsRx)
 	}
-	
+
 	if status.BytesRx != 300 {
 		t.Errorf("Expected 300 RX bytes, got %d", status.BytesRx)
+	}
+}
+
+// TestBridge_ScheduledDisconnectDeadlock tests for the double-lock deadlock bug
+// where disconnect() holds b.mu and calls sendDisconnect() which tries to acquire b.mu again
+func TestBridge_ScheduledDisconnectDeadlock(t *testing.T) {
+	logger := logger.NewTestLogger(os.Stdout)
+	mockServer := &MockNetworkServer{}
+
+	config := config.BridgeConfig{
+		Name:     "test-deadlock",
+		Host:     "localhost",
+		Port:     4200,
+		Schedule: "",
+		Duration: 200 * time.Millisecond, // Short duration to trigger disconnect quickly
+	}
+
+	bridge := NewBridge(config, mockServer, logger)
+
+	// Create a context with a timeout
+	ctx := context.Background()
+
+	// Start the scheduled bridge in a goroutine
+	done := make(chan bool)
+	go func() {
+		bridge.RunScheduled(ctx, config.Duration)
+		done <- true
+	}()
+
+	// Wait for the bridge to complete or timeout
+	select {
+	case <-done:
+		// Success - bridge completed without deadlock
+		t.Log("Bridge completed successfully without deadlock")
+	case <-time.After(2 * time.Second):
+		// This indicates a deadlock - the bridge never completed
+		t.Fatal("Bridge disconnect deadlocked - timeout waiting for completion")
+	}
+
+	// Verify that disconnect packet was sent
+	if len(mockServer.sentPackets) == 0 {
+		t.Error("Expected disconnect packet to be sent")
 	}
 }
