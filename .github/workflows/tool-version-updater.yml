@@ -1,0 +1,65 @@
+name: Update tool versions
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # every Monday at 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  check-and-open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up bash
+        run: sudo apt-get update && sudo apt-get install -y curl jq
+
+      - name: Run tool version check
+        run: |
+          chmod +x ./scripts/check-tool-versions.sh
+          ./scripts/check-tool-versions.sh Makefile || true
+        id: check
+
+      - name: Show generated update script (if any)
+        if: always()
+        run: |
+          if [ -f .tools_update_makefile.sh ]; then
+            echo "Found update script:" && sed -n '1,200p' .tools_update_makefile.sh
+          else
+            echo "No updates generated"
+          fi
+
+      - name: Run update script and commit changes
+        run: |
+          if [ -f .tools_update_makefile.sh ]; then
+            bash ./.tools_update_makefile.sh
+            git add Makefile
+            git commit -m "chore(tools): bump dev tool pins (automated)" || echo "no changes to commit"
+          else
+            echo "No update script present; nothing to do"
+          fi
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: ${{ steps.check_changes.outputs.changed == 'true' }}
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(tools): bump dev tool pins (automated)"
+          branch: "chore/tool-pins-bump-${{ github.run_id }}"
+          title: "chore: update pinned dev tool versions"
+          body: |
+            This PR was created by an automated job that checks for newer releases of
+            development tools pinned in the Makefile (`golangci-lint`, `air`, `govulncheck`).
+            If the PR contains changes, please review the updated versions and run `make install-tools`
+            locally to verify.
+          labels: automated,tools
