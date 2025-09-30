@@ -163,9 +163,11 @@ func (m *Manager) setupBridge(config config.BridgeConfig) error {
 			logger.String("schedule", config.Schedule))
 
 		// Check if we should start this bridge now (missed schedule recovery)
-		if m.shouldStartNow(config) {
-			m.logger.Info("Recovering missed schedule", logger.String("name", config.Name))
-			go m.startScheduledBridge(config.Name, config.Duration)
+		if shouldStart, remainingDuration := m.shouldStartNowWithDuration(config); shouldStart {
+			m.logger.Info("Recovering missed schedule",
+				logger.String("name", config.Name),
+				logger.Duration("remaining_duration", remainingDuration))
+			go m.startScheduledBridge(config.Name, remainingDuration)
 		}
 	}
 
@@ -202,11 +204,18 @@ func (m *Manager) setupScheduleTracking(config config.BridgeConfig) {
 }
 
 // shouldStartNow determines if a scheduled bridge should start now due to missed schedule
+// Deprecated: Use shouldStartNowWithDuration instead
 func (m *Manager) shouldStartNow(config config.BridgeConfig) bool {
+	shouldStart, _ := m.shouldStartNowWithDuration(config)
+	return shouldStart
+}
+
+// shouldStartNowWithDuration determines if a scheduled bridge should start now and returns remaining duration
+func (m *Manager) shouldStartNowWithDuration(config config.BridgeConfig) (bool, time.Duration) {
 	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 	schedule, err := parser.Parse(config.Schedule)
 	if err != nil {
-		return false
+		return false, 0
 	}
 
 	now := time.Now()
@@ -230,16 +239,20 @@ func (m *Manager) shouldStartNow(config config.BridgeConfig) bool {
 		windowEnd := lastScheduled.Add(config.Duration)
 		if now.Before(windowEnd) {
 			// We're within the scheduled window, should be running
+			// Calculate remaining duration
+			remainingDuration := windowEnd.Sub(now)
+
 			m.logger.Info("Detected missed schedule within window",
 				logger.String("name", config.Name),
 				logger.Any("scheduled_at", lastScheduled),
 				logger.Any("window_ends", windowEnd),
-				logger.Any("now", now))
-			return true
+				logger.Any("now", now),
+				logger.Duration("remaining_duration", remainingDuration))
+			return true, remainingDuration
 		}
 	}
 
-	return false
+	return false, 0
 }
 
 // startScheduledBridge starts a bridge for its scheduled duration
@@ -308,38 +321,35 @@ func (m *Manager) checkMissedSchedules() {
 	m.mu.RUnlock()
 
 	for _, schedInfo := range schedules {
-		if m.shouldRecoverSchedule(schedInfo) {
+		if shouldRecover, remainingDuration := m.shouldRecoverScheduleWithDuration(schedInfo); shouldRecover {
 			m.logger.Info("Recovering missed schedule",
 				logger.String("name", schedInfo.Name),
-				logger.Any("last_execution", schedInfo.LastExecution))
+				logger.Any("last_execution", schedInfo.LastExecution),
+				logger.Duration("remaining_duration", remainingDuration))
 
 			m.mu.Lock()
 			schedInfo.MissedWindows++
 			m.stats.MissedSchedules++
 			m.mu.Unlock()
 
-			// Find the bridge config to get duration
-			var bridgeConfig *config.BridgeConfig
-			for _, cfg := range m.config {
-				if cfg.Name == schedInfo.Name {
-					bridgeConfig = &cfg
-					break
-				}
-			}
-
-			if bridgeConfig != nil {
-				go m.startScheduledBridge(schedInfo.Name, bridgeConfig.Duration)
-			}
+			go m.startScheduledBridge(schedInfo.Name, remainingDuration)
 		}
 	}
 }
 
 // shouldRecoverSchedule determines if a schedule should be recovered
+// Deprecated: Use shouldRecoverScheduleWithDuration instead
 func (m *Manager) shouldRecoverSchedule(schedInfo *ScheduleInfo) bool {
+	shouldRecover, _ := m.shouldRecoverScheduleWithDuration(schedInfo)
+	return shouldRecover
+}
+
+// shouldRecoverScheduleWithDuration determines if a schedule should be recovered and returns remaining duration
+func (m *Manager) shouldRecoverScheduleWithDuration(schedInfo *ScheduleInfo) (bool, time.Duration) {
 	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 	schedule, err := parser.Parse(schedInfo.Schedule)
 	if err != nil {
-		return false
+		return false, 0
 	}
 
 	now := time.Now()
@@ -373,13 +383,15 @@ func (m *Manager) shouldRecoverSchedule(schedInfo *ScheduleInfo) bool {
 				status := bridge.GetStatus()
 				// Only recover if the bridge is not currently connected or scheduled
 				if status.State == StateDisconnected || status.State == StateFailed {
-					return true
+					// Calculate remaining duration
+					remainingDuration := windowEnd.Sub(now)
+					return true, remainingDuration
 				}
 			}
 		}
 	}
 
-	return false
+	return false, 0
 }
 
 // shouldBeActive was removed because it was unused; schedule checking is handled
