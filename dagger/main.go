@@ -54,7 +54,7 @@ func (m *YsfNexus) Vuln(ctx context.Context, source *dagger.Directory) (string, 
 		// vulnerability scanner from the module root.
 		WithExec([]string{"make", "install-tools"}).
 		// Smoke-check govulncheck presence/version and then run the scan.
-	WithExec([]string{"sh", "-lc", "export PATH=/go/bin:$HOME/go/bin:$PATH && which govulncheck || true && govulncheck version || true && govulncheck ./..."}).
+	WithExec([]string{"sh", "-lc", "export PATH=/go/bin:$HOME/go/bin:$PATH && echo '--- DIR /src ---' && ls -la /src || true && echo '--- go.mod ---' && cat /src/go.mod || true && echo '--- go env GOMOD ---' && go env GOMOD || true && echo '--- go list ./... ---' && go list ./... || true && echo '--- govulncheck presence ---' && which govulncheck || true && govulncheck version || true && echo '--- govulncheck run ---' && govulncheck ./..."}).
 		Stdout(ctx)
 }
 
