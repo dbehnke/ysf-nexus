@@ -449,8 +449,20 @@ func (b *Bridge) createPingPacket() []byte {
 }
 
 func (b *Bridge) createDisconnectPacket() []byte {
-	// TODO: Implement YSF-specific disconnect packet
-	return []byte("YSFD")
+	// Create YSFU (YSF Unlink) packet - 14 bytes total
+	packet := make([]byte, 14)
+
+	// Packet type: YSFU
+	copy(packet[0:4], "YSFU")
+
+	// Callsign (padded to 10 bytes with spaces)
+	callsign := b.config.Name
+	if len(callsign) > 10 {
+		callsign = callsign[:10]
+	}
+	copy(packet[4:14], fmt.Sprintf("%-10s", callsign))
+
+	return packet
 }
 
 // Status and utility methods

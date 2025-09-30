@@ -223,3 +223,66 @@ func TestBridge_ScheduledDisconnectDeadlock(t *testing.T) {
 		t.Error("Expected disconnect packet to be sent")
 	}
 }
+
+// TestBridge_DisconnectPacket tests that YSFU packets are created correctly
+func TestBridge_DisconnectPacket(t *testing.T) {
+	logger := logger.NewTestLogger(os.Stdout)
+	mockServer := &MockNetworkServer{}
+
+	config := config.BridgeConfig{
+		Name: "TEST-BRDG",
+		Host: "localhost",
+		Port: 4200,
+	}
+
+	bridge := NewBridge(config, mockServer, logger)
+
+	// Test createDisconnectPacket directly
+	packet := bridge.createDisconnectPacket()
+
+	// Verify packet structure
+	if len(packet) != 14 {
+		t.Errorf("Expected packet length 14, got %d", len(packet))
+	}
+
+	// Check packet type (first 4 bytes should be "YSFU")
+	packetType := string(packet[0:4])
+	if packetType != "YSFU" {
+		t.Errorf("Expected packet type 'YSFU', got '%s'", packetType)
+	}
+
+	// Check callsign (bytes 4-14, should be "TEST-BRDG " - padded to 10 chars)
+	callsign := string(packet[4:14])
+	expected := "TEST-BRDG "
+	if callsign != expected {
+		t.Errorf("Expected callsign '%s', got '%s'", expected, callsign)
+	}
+
+	t.Logf("YSFU packet created correctly: type=%s, callsign='%s'", packetType, callsign)
+}
+
+// TestBridge_LongCallsignTruncation tests callsign truncation for disconnect packets
+func TestBridge_LongCallsignTruncation(t *testing.T) {
+	logger := logger.NewTestLogger(os.Stdout)
+	mockServer := &MockNetworkServer{}
+
+	config := config.BridgeConfig{
+		Name: "VERY-LONG-BRIDGE-NAME", // 20 chars, should be truncated to 10
+		Host: "localhost",
+		Port: 4200,
+	}
+
+	bridge := NewBridge(config, mockServer, logger)
+
+	// Test createDisconnectPacket with long name
+	packet := bridge.createDisconnectPacket()
+
+	// Check that callsign was truncated to 10 characters
+	callsign := string(packet[4:14])
+	expected := "VERY-LONG-" // First 10 chars
+	if callsign != expected {
+		t.Errorf("Expected truncated callsign '%s', got '%s'", expected, callsign)
+	}
+
+	t.Logf("Long callsign correctly truncated: '%s'", callsign)
+}
