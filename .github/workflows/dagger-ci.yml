@@ -44,6 +44,15 @@ jobs:
           # If the module isn't available, this will still validate the CLI runtime
           dagger --version >/dev/null
 
+      - name: Dagger module smoke invocation
+        run: |
+          echo "Invoking module: YsfNexus.ContainerEcho --string-arg hello"
+          # Run the module invocation as a non-fatal smoke check so CI doesn't fail if module isn't yet implemented
+          dagger call "YsfNexus.ContainerEcho" --string-arg "hello" --source=. || {
+            echo "Warning: module invocation failed (non-fatal). Continue with CI."
+            dagger functions || true
+          }
+
       - name: Run Dagger CI Pipeline
         run: |
           dagger call ci --source=.
