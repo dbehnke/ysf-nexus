@@ -15,11 +15,11 @@ GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
 
 # Pinned dev tool versions (update as needed for reproducible tooling)
-GOLANGCI_LINT_VERSION:=v1.63.4
+GOLANGCI_LINT_VERSION:=v2.5.0
 GOLANGCI_LINT_MODULE:=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
-AIR_VERSION:=v1.40.0
+AIR_VERSION:=v1.63.0
 AIR_MODULE:=github.com/cosmtrek/air
-GOVULNCHECK_VERSION:=v0.1.0
+GOVULNCHECK_VERSION:=v1.1.4
 GOVULNCHECK_MODULE:=golang.org/x/vuln/cmd/govulncheck
 
 # Build targets
