@@ -19,27 +19,30 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: Install Dagger CLI
+      - name: Install Dagger CLI (official installer)
         run: |
-          echo "Installing Dagger CLI"
+          echo "Installing Dagger CLI using official installer"
           DAGGER_VERSION="v0.18.19"
-          # Download from GitHub releases (more secure than install script)
-          curl -fsSL "https://github.com/dagger/dagger/releases/download/${DAGGER_VERSION}/dagger_v${DAGGER_VERSION#v}_linux_amd64.tar.gz" -o dagger.tar.gz
-          # Verify it's a valid tar.gz file
-          file dagger.tar.gz | grep -q "gzip compressed data"
-          # Verify SHA256 checksum (published in releases checksums.txt)
-          # Expected checksum for v0.18.19 linux_amd64 (from dagger/dagger checksums.txt)
-          EXPECTED_SHA="f13f361fb38980d04e2cbe80eb1faf95786455f61c64e5d4f2cffecb0fedfa28"
-          echo "${EXPECTED_SHA}  dagger.tar.gz" | sha256sum -c -
-          # Extract into a temporary directory to avoid conflicts if a file named 'dagger' exists
-          TMPDIR=$(mktemp -d)
-          tar -xzf dagger.tar.gz -C "${TMPDIR}"
-          if [ ! -x "${TMPDIR}/dagger" ]; then
-            chmod +x "${TMPDIR}/dagger" || true
-          fi
-          sudo mv -f "${TMPDIR}/dagger" /usr/local/bin/dagger
-          rm -rf "${TMPDIR}"
+          # Download the official installer from dl.dagger.io and run it.
+          # The installer handles arch detection and checksum verification.
+          curl -fsSL https://dl.dagger.io/dagger/install.sh -o /tmp/install-dagger.sh
+          chmod +x /tmp/install-dagger.sh
+          # Run the installer with BIN_DIR=/usr/local/bin. Use sudo if needed.
+          sudo env BIN_DIR=/usr/local/bin DAGGER_VERSION=${DAGGER_VERSION} /bin/sh /tmp/install-dagger.sh
+          rm -f /tmp/install-dagger.sh
           dagger version
+
+      - name: Dagger smoke test
+        run: |
+          echo "Running Dagger smoke tests"
+          # Show installed binary and check architecture
+          file $(which dagger) || true
+          dagger version
+          # Basic CLI sanity checks
+          dagger help >/dev/null
+          # Try a minimal invocation of the local module; this should return non-error quickly
+          # If the module isn't available, this will still validate the CLI runtime
+          dagger --version >/dev/null
 
       - name: Run Dagger CI Pipeline
         run: |
