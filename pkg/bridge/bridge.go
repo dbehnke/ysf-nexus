@@ -241,7 +241,9 @@ func (b *Bridge) disconnect() {
 		
 		// Send disconnect packet
 		if b.remoteAddr != nil {
-			b.sendDisconnect()
+			if err := b.sendDisconnect(); err != nil {
+				b.logger.Warn("Failed to send disconnect packet", logger.Error(err))
+			}
 		}
 	}
 	

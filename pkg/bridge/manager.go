@@ -382,38 +382,8 @@ func (m *Manager) shouldRecoverSchedule(schedInfo *ScheduleInfo) bool {
 	return false
 }
 
-// shouldBeActive checks if a scheduled bridge should currently be active
-// This handles missed cron triggers by checking if we're within the schedule window
-func (m *Manager) shouldBeActive(cfg config.BridgeConfig) bool {
-	if cfg.Permanent {
-		return true // Permanent bridges are always active
-	}
-	
-	// Parse the cron schedule to determine the next run time
-	schedule, err := cron.ParseStandard(cfg.Schedule)
-	if err != nil {
-		m.logger.Error("Failed to parse bridge schedule", 
-			logger.String("bridge", cfg.Name), 
-			logger.String("schedule", cfg.Schedule), 
-			logger.Error(err))
-		return false
-	}
-	
-	now := time.Now()
-	
-	// Get the previous scheduled time (when this should have started)
-	prevRun := schedule.Next(now.Add(-24 * time.Hour)) // Look back up to 24 hours
-	for prevRun.Before(now) && now.Sub(prevRun) > 24*time.Hour {
-		prevRun = schedule.Next(prevRun)
-	}
-	
-	// Check if we're within the duration window of the last scheduled time
-	if prevRun.Before(now) && now.Sub(prevRun) <= cfg.Duration {
-		return true
-	}
-	
-	return false
-}
+// shouldBeActive was removed because it was unused; schedule checking is handled
+// by shouldStartNow and related helpers in this manager.
 
 // Stop stops all bridges and the scheduler
 func (m *Manager) Stop() {

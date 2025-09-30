@@ -326,7 +326,9 @@ func (s *IntegrationTestSuite) TestRepeaterFunctionality(t *testing.T) {
 	
 	// Cleanup
 	for _, clientID := range clientIDs {
-		repeater.DisconnectClient(clientID)
+		if err := repeater.DisconnectClient(clientID); err != nil {
+			t.Logf("Failed to disconnect client %s: %v", clientID, err)
+		}
 	}
 }
 
@@ -425,7 +427,7 @@ func (s *IntegrationTestSuite) TestAPIIntegration(t *testing.T) {
 		t.Errorf("Failed to call current-talker API: %v", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("API returned status %d, want %d", resp.StatusCode, http.StatusOK)
@@ -448,7 +450,9 @@ func (s *IntegrationTestSuite) TestAPIIntegration(t *testing.T) {
 	t.Logf("API Response: %s", string(body))
 	
 	// Stop the talker
-	bridge.StopCurrentTalker()
+	if err := bridge.StopCurrentTalker(); err != nil {
+		t.Errorf("Failed to stop talker: %v", err)
+	}
 	
 	// Test that API now returns no current talker
 	time.Sleep(100 * time.Millisecond)
@@ -458,8 +462,8 @@ func (s *IntegrationTestSuite) TestAPIIntegration(t *testing.T) {
 		t.Errorf("Failed to call current-talker API (second call): %v", err)
 		return
 	}
-	defer resp2.Body.Close()
-	
+	defer func() { _ = resp2.Body.Close() }()
+
 	body2, err := io.ReadAll(resp2.Body)
 	if err != nil {
 		t.Errorf("Failed to read second response body: %v", err)
@@ -526,17 +530,27 @@ func (s *IntegrationTestSuite) TestComplexScenarios(t *testing.T) {
 			
 			// Add clients and generate activity
 			client, err := repeater1.ConnectClient("K5ABC", "Dallas, TX", "127.0.0.1:21001")
-			if err == nil {
-				repeater1.StartTalking(client.ID)
-				repeater1.SendVoicePackets(client.ID, 5)
-				repeater1.StopTalking(client.ID)
-				repeater1.DisconnectClient(client.ID)
-				
-				t.Log("Generated linked repeater activity")
-			}
+				if err == nil {
+					if err := repeater1.StartTalking(client.ID); err != nil {
+						t.Logf("failed to start talking for client %s: %v", client.ID, err)
+					}
+					if err := repeater1.SendVoicePackets(client.ID, 5); err != nil {
+						t.Logf("failed to send voice packets for client %s: %v", client.ID, err)
+					}
+					if err := repeater1.StopTalking(client.ID); err != nil {
+						t.Logf("failed to stop talking for client %s: %v", client.ID, err)
+					}
+					if err := repeater1.DisconnectClient(client.ID); err != nil {
+						t.Logf("failed to disconnect client %s: %v", client.ID, err)
+					}
+
+					t.Log("Generated linked repeater activity")
+				}
 			
 			// Unlink
-			repeater1.UnlinkFromRepeater()
+			if err := repeater1.UnlinkFromRepeater(); err != nil {
+				t.Logf("failed to unlink repeater: %v", err)
+			}
 		}
 	}
 	

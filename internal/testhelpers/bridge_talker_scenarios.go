@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sync"
 	"testing"
@@ -404,7 +405,7 @@ func (b *BridgeTalkerTestScenarios) TestAPIIntegrationWithBridgeTalkers(t *testi
 		t.Logf("API call failed (expected if server not running): %v", err)
 		// Continue with mock testing even if API is not available
 	} else {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		body, _ := io.ReadAll(resp.Body)
 		t.Logf("API Response (no talker): %s", string(body))
 	}
@@ -431,8 +432,8 @@ func (b *BridgeTalkerTestScenarios) TestAPIIntegrationWithBridgeTalkers(t *testi
 	if err != nil {
 		t.Logf("API call failed (expected if server not running): %v", err)
 	} else {
-		defer resp.Body.Close()
-		
+		defer func() { _ = resp.Body.Close() }()
+
 		if resp.StatusCode == http.StatusOK {
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
@@ -444,7 +445,7 @@ func (b *BridgeTalkerTestScenarios) TestAPIIntegrationWithBridgeTalkers(t *testi
 					t.Errorf("Failed to parse API response: %v", err)
 				} else {
 					t.Logf("API Response (with talker): %s", string(body))
-					
+
 					// Validate response structure
 					if data, ok := apiResponse["data"].(map[string]interface{}); ok {
 						if callsign, ok := data["callsign"].(string); ok {
@@ -454,7 +455,7 @@ func (b *BridgeTalkerTestScenarios) TestAPIIntegrationWithBridgeTalkers(t *testi
 						} else {
 							t.Error("API response missing callsign field")
 						}
-						
+
 						if duration, ok := data["duration"].(float64); ok {
 							if duration <= 0 {
 								t.Errorf("API duration should be positive, got %f", duration)
@@ -485,7 +486,7 @@ func (b *BridgeTalkerTestScenarios) TestAPIIntegrationWithBridgeTalkers(t *testi
 	if err != nil {
 		t.Logf("API call failed (expected if server not running): %v", err)
 	} else {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		body, _ := io.ReadAll(resp.Body)
 		t.Logf("API Response (after stop): %s", string(body))
 	}
@@ -530,7 +531,10 @@ func (b *BridgeTalkerTestScenarios) TestTalkerDurationTracking(t *testing.T) {
 		// Send packets during duration
 		go func() {
 			for elapsed := time.Duration(0); elapsed < expectedDuration; elapsed += 20*time.Millisecond {
-				bridge.SendVoicePackets(1)
+				if err := bridge.SendVoicePackets(1); err != nil {
+					log.Printf("failed to send voice packet during duration test: %v", err)
+					break
+				}
 				time.Sleep(20 * time.Millisecond)
 			}
 		}()

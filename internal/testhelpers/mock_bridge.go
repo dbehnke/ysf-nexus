@@ -290,7 +290,9 @@ func (b *MockBridgeEndpoint) SimulateTalkingSequence(callsign, location string, 
 			}
 		}
 		
-		b.StopCurrentTalker()
+		if err := b.StopCurrentTalker(); err != nil {
+			log.Printf("mock bridge: StopCurrentTalker returned error: %v", err)
+		}
 	}()
 }
 
@@ -378,15 +380,18 @@ func (b *MockBridgeEndpoint) generateBridgeVoiceTerminator(callsign string) []by
 }
 
 func (b *MockBridgeEndpoint) sendPacket(packet []byte) {
-	b.packetsSent++
 	b.lastActivity = time.Now()
-	
+
 	if b.onPacket != nil {
 		b.onPacket(packet)
 	}
-	
-	// Send through the connection
-	b.connection.Write(packet)
+
+	// Send through the connection and only count on success
+	if _, err := b.connection.Write(packet); err != nil {
+		log.Printf("mock bridge: failed to write packet: %v", err)
+	} else {
+		b.packetsSent++
+	}
 }
 
 // MockBridgeNetwork manages multiple bridge endpoints
@@ -456,7 +461,9 @@ func (n *MockBridgeNetwork) DisconnectAll() {
 	defer n.mu.RUnlock()
 	
 	for _, bridge := range n.bridges {
-		bridge.Disconnect()
+		if err := bridge.Disconnect(); err != nil {
+			log.Printf("mock bridge network: failed to disconnect bridge %s: %v", bridge.ID, err)
+		}
 	}
 }
 

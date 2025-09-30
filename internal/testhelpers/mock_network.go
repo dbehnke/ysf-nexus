@@ -248,7 +248,10 @@ func (s *MockUDPServer) Stop() {
 	
 	s.running = false
 	for _, conn := range s.connections {
-		conn.Close()
+		if err := conn.Close(); err != nil {
+			// log without importing log at top-level to avoid change in function signatures
+			fmt.Printf("mock udp server: failed to close connection: %v\n", err)
+		}
 	}
 }
 

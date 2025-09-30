@@ -116,7 +116,9 @@ func (r *MockYSFRepeater) DisconnectClient(clientID string) error {
 		return fmt.Errorf("client not found: %s", clientID)
 	}
 	
-	client.conn.Close()
+	if err := client.conn.Close(); err != nil {
+		log.Printf("mock repeater: failed to close client conn: %v", err)
+	}
 	delete(r.clients, clientID)
 	
 	if r.onClientDisconnect != nil {
@@ -271,34 +273,35 @@ func (r *MockYSFRepeater) SimulateRandomActivity(duration time.Duration) {
 		end := time.Now().Add(duration)
 		
 		for time.Now().Before(end) {
-			select {
-			case <-ticker.C:
+			<-ticker.C
+			r.mu.RLock()
+			clientCount := len(r.clients)
+			r.mu.RUnlock()
+
+			if clientCount > 0 && rand.Float64() < 0.1 { // 10% chance per second
+				// Pick a random client to start talking
 				r.mu.RLock()
-				clientCount := len(r.clients)
+				var clientIDs []string
+				for id := range r.clients {
+					if !r.clients[id].isTalking {
+						clientIDs = append(clientIDs, id)
+					}
+				}
 				r.mu.RUnlock()
-				
-				if clientCount > 0 && rand.Float64() < 0.1 { // 10% chance per second
-					// Pick a random client to start talking
-					r.mu.RLock()
-					var clientIDs []string
-					for id := range r.clients {
-						if !r.clients[id].isTalking {
-							clientIDs = append(clientIDs, id)
+
+				if len(clientIDs) > 0 {
+					clientID := clientIDs[rand.Intn(len(clientIDs))]
+					if err := r.StartTalking(clientID); err != nil {
+						log.Printf("mock repeater: failed to start talking: %v", err)
+					}
+					// Talk for 2-10 seconds
+					talkDuration := time.Duration(2+rand.Intn(8)) * time.Second
+					go func(cID string, dur time.Duration) {
+						time.Sleep(dur)
+						if err := r.StopTalking(cID); err != nil {
+							log.Printf("mock repeater: failed to stop talking: %v", err)
 						}
-					}
-					r.mu.RUnlock()
-					
-					if len(clientIDs) > 0 {
-						clientID := clientIDs[rand.Intn(len(clientIDs))]
-						r.StartTalking(clientID)
-						
-						// Talk for 2-10 seconds
-						talkDuration := time.Duration(2+rand.Intn(8)) * time.Second
-						go func() {
-							time.Sleep(talkDuration)
-							r.StopTalking(clientID)
-						}()
-					}
+					}(clientID, talkDuration)
 				}
 			}
 		}
@@ -428,7 +431,9 @@ func (n *MockYSFRepeaterNetwork) StopAll() {
 	defer n.mu.RUnlock()
 	
 	for _, repeater := range n.repeaters {
-		repeater.Stop()
+		if err := repeater.Stop(); err != nil {
+			log.Printf("mock repeater network: failed to stop repeater %s: %v", repeater.ID, err)
+		}
 	}
 }
 
