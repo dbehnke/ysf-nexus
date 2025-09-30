@@ -20,6 +20,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 
+	"github.com/dbehnke/ysf-nexus/pkg/bridge"
 	"github.com/dbehnke/ysf-nexus/pkg/config"
 	"github.com/dbehnke/ysf-nexus/pkg/logger"
 	"github.com/dbehnke/ysf-nexus/pkg/repeater"
@@ -41,6 +42,8 @@ type Server struct {
 	logger          *logger.Logger
 	httpServer      *http.Server
 	repeaterManager *repeater.Manager
+	bridgeManager   interface{}
+	reflector       interface{}
 	eventChan       <-chan repeater.Event
 	talkLogs        []TalkLogEntry
 	websocketHub    *WebSocketHub
@@ -82,7 +85,7 @@ var upgrader = websocket.Upgrader{
 }
 
 // NewServer creates a new web server
-func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager, eventChan <-chan repeater.Event) *Server {
+func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager, eventChan <-chan repeater.Event, bridgeManager interface{}, reflector interface{}) *Server {
 	hub := &WebSocketHub{
 		clients:    make(map[*websocket.Conn]bool),
 		broadcast:  make(chan []byte, 256),
@@ -96,6 +99,8 @@ func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager
 		config:          cfg,
 		logger:          log.WithComponent("web"),
 		repeaterManager: manager,
+		bridgeManager:   bridgeManager,
+		reflector:       reflector,
 		eventChan:       eventChan,
 		talkLogs:        make([]TalkLogEntry, 0),
 		websocketHub:    hub,
@@ -192,7 +197,9 @@ func (s *Server) setupRoutes() *mux.Router {
 	// Stats endpoints
 	api.HandleFunc("/stats", s.handleStats).Methods("GET")
 	api.HandleFunc("/repeaters", s.handleRepeaters).Methods("GET")
+	api.HandleFunc("/bridges", s.handleBridges).Methods("GET")
 	api.HandleFunc("/logs/talk", s.handleTalkLogs).Methods("GET")
+	api.HandleFunc("/current-talker", s.handleCurrentTalker).Methods("GET")
 
 	// System endpoints
 	api.HandleFunc("/system/info", s.handleSystemInfo).Methods("GET")
@@ -281,10 +288,17 @@ func (s *Server) processEvents(ctx context.Context) {
 
 // handleEvent processes a repeater event
 func (s *Server) handleEvent(event repeater.Event) {
-	s.logger.Debug("Processing event",
+	s.logger.Info("handleEvent ENTRY",
 		logger.String("type", event.Type),
 		logger.String("callsign", event.Callsign),
+		logger.String("address", event.Address),
 		logger.Duration("duration", event.Duration))
+
+	defer func() {
+		s.logger.Info("handleEvent EXIT",
+			logger.String("type", event.Type),
+			logger.String("callsign", event.Callsign))
+	}()
 
 	switch event.Type {
 	case repeater.EventTalkEnd:
@@ -373,6 +387,10 @@ func (hub *WebSocketHub) run() {
 
 // broadcastWebSocketMessage broadcasts a message to all WebSocket clients
 func (s *Server) broadcastWebSocketMessage(messageType string, data interface{}) {
+	s.logger.Info("broadcastWebSocketMessage ENTRY",
+		logger.String("message_type", messageType),
+		logger.Any("data", data))
+
 	message := WebSocketMessage{
 		Type: messageType,
 		Data: data,
@@ -384,11 +402,19 @@ func (s *Server) broadcastWebSocketMessage(messageType string, data interface{})
 		return
 	}
 
+	s.logger.Info("broadcastWebSocketMessage: attempting to send to hub",
+		logger.String("message_type", messageType),
+		logger.Int("broadcast_channel_len", len(s.websocketHub.broadcast)),
+		logger.Int("broadcast_channel_cap", cap(s.websocketHub.broadcast)))
+
 	select {
 	case s.websocketHub.broadcast <- jsonData:
+		s.logger.Info("broadcastWebSocketMessage: message sent to broadcast channel",
+			logger.String("message_type", messageType))
 	default:
 		// Don't block if broadcast channel is full
-		s.logger.Warn("WebSocket broadcast channel full, dropping message")
+		s.logger.Warn("WebSocket broadcast channel full, dropping message",
+			logger.String("message_type", messageType))
 	}
 }
 
@@ -525,6 +551,118 @@ func (s *Server) handleRepeaters(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleBridges(w http.ResponseWriter, r *http.Request) {
+	bridges := make(map[string]interface{})
+	
+	// Check if bridge manager is available and has GetStatus method
+	if s.bridgeManager != nil {
+		// Use type assertion to check if it has GetStatus method with correct return type
+		if bm, ok := s.bridgeManager.(interface{ GetStatus() map[string]bridge.BridgeStatus }); ok {
+			// Run GetStatus with a short timeout to avoid blocking the HTTP handler
+			type result struct {
+				status map[string]bridge.BridgeStatus
+			}
+			ch := make(chan result, 1)
+
+			go func() {
+				ch <- result{status: bm.GetStatus()}
+			}()
+
+			select {
+			case res := <-ch:
+				for name, bridgeStatus := range res.status {
+					bridges[name] = bridgeStatus
+				}
+			case <-time.After(500 * time.Millisecond):
+				s.logger.Warn("bridge manager GetStatus timed out, returning partial/empty result")
+				// leave bridges empty
+			}
+		}
+	}
+	
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
+		"bridges": bridges,
+	}); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
+}
+
+func (s *Server) handleCurrentTalker(w http.ResponseWriter, r *http.Request) {
+	// First check for regular repeater talkers
+	stats := s.repeaterManager.GetStats()
+	for _, repeater := range stats.Repeaters {
+		if repeater.IsTalking {
+			// Found a regular repeater that's talking
+			response := map[string]interface{}{
+				"current_talker": map[string]interface{}{
+					"callsign":      repeater.Callsign,
+					"address":       repeater.Address,
+					"type":          "repeater",
+					"is_talking":    true,
+					"talk_duration": repeater.TalkDuration,
+				},
+			}
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				s.logger.Error("failed to encode JSON response", logger.Error(err))
+			}
+			return
+		}
+	}
+	
+	// No regular repeater talking, check for bridge talkers
+	if s.reflector != nil {
+		if refl, ok := s.reflector.(interface{ GetCurrentBridgeTalker() interface{} }); ok {
+			// Protect reflector call with a short timeout so slow reflector doesn't hang HTTP
+			type reflResult struct {
+				talker interface{}
+			}
+			ch := make(chan reflResult, 1)
+
+			go func() {
+				ch <- reflResult{talker: refl.GetCurrentBridgeTalker()}
+			}()
+
+			select {
+			case res := <-ch:
+				bridgeTalker := res.talker
+				if bridgeTalker != nil {
+					// Use type assertion to extract bridge talker information
+					if bt, ok := bridgeTalker.(interface {
+						GetCallsign() string
+						GetBridgeName() string
+						GetTalkDuration() time.Duration
+					}); ok {
+						response := map[string]interface{}{
+							"current_talker": map[string]interface{}{
+								"callsign":      bt.GetCallsign(),
+								"address":       bt.GetBridgeName(), // Show bridge name as "address" 
+								"type":          "bridge",
+								"is_talking":    true,
+								"talk_duration": int(bt.GetTalkDuration().Seconds()),
+							},
+						}
+						if err := json.NewEncoder(w).Encode(response); err != nil {
+							s.logger.Error("failed to encode JSON response", logger.Error(err))
+						}
+						return
+					}
+				}
+			case <-time.After(500 * time.Millisecond):
+				s.logger.Warn("reflector GetCurrentBridgeTalker timed out, returning null")
+				// fall through to return null
+			}
+		}
+	}
+	
+	// No one is talking
+	response := map[string]interface{}{
+		"current_talker": nil,
+	}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
+}
+
 func (s *Server) handleTalkLogs(w http.ResponseWriter, r *http.Request) {
 	limitStr := r.URL.Query().Get("limit")
 	limit := 100 // default
@@ -551,6 +689,8 @@ func (s *Server) handleTalkLogs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
+		"name":           s.config.Server.Name,
+		"description":    s.config.Server.Description,
 		"version":        "dev", // This would come from build info
 		"buildTime":      "unknown",
 		"host":           s.config.Server.Host,

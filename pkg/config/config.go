@@ -46,12 +46,16 @@ type WebConfig struct {
 
 // BridgeConfig holds bridge connection configuration
 type BridgeConfig struct {
-	Name     string        `mapstructure:"name"`
-	Host     string        `mapstructure:"host"`
-	Port     int           `mapstructure:"port"`
-	Schedule string        `mapstructure:"schedule"`
-	Duration time.Duration `mapstructure:"duration"`
-	Enabled  bool          `mapstructure:"enabled"`
+	Name        string        `mapstructure:"name"`
+	Host        string        `mapstructure:"host"`
+	Port        int           `mapstructure:"port"`
+	Schedule    string        `mapstructure:"schedule"`
+	Duration    time.Duration `mapstructure:"duration"`
+	Enabled     bool          `mapstructure:"enabled"`
+	Permanent   bool          `mapstructure:"permanent"`     // If true, ignore schedule and stay connected always
+	MaxRetries  int           `mapstructure:"max_retries"`   // Max reconnection attempts (0 = infinite)
+	RetryDelay  time.Duration `mapstructure:"retry_delay"`   // Initial retry delay for exponential backoff
+	HealthCheck time.Duration `mapstructure:"health_check"`  // How often to check connection health
 }
 
 // MQTTConfig holds MQTT client configuration
@@ -181,4 +185,10 @@ func setDefaults() {
 	viper.SetDefault("metrics.prometheus.enabled", true)
 	viper.SetDefault("metrics.prometheus.port", 9090)
 	viper.SetDefault("metrics.prometheus.path", "/metrics")
+
+	// Bridge defaults
+	viper.SetDefault("bridges.permanent", false)
+	viper.SetDefault("bridges.max_retries", 0)      // 0 = infinite retries
+	viper.SetDefault("bridges.retry_delay", "30s")  // Start with 30 second delay
+	viper.SetDefault("bridges.health_check", "60s") // Check connection every minute
 }

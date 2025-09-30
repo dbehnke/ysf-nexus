@@ -51,20 +51,22 @@
       ></div>
 
       <!-- Sidebar -->
-      <aside 
+      <aside
         :class="[
-          'w-64 bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 z-50 transition-transform duration-300 ease-in-out',
+          'bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 z-50 transition-all duration-300 ease-in-out',
+          // Desktop: collapsible width
+          sidebarCollapsed ? 'lg:w-16' : 'lg:w-64',
           // Desktop: always visible and static
           'lg:block lg:static lg:h-auto lg:transform-none',
           // Mobile: conditionally visible, fixed position when open
-          mobileMenuOpen 
-            ? 'fixed top-16 left-0 h-[calc(100vh-4rem)] transform translate-x-0' 
+          mobileMenuOpen
+            ? 'fixed top-16 left-0 w-64 h-[calc(100vh-4rem)] transform translate-x-0'
             : 'hidden lg:block'
         ]"
       >
-        <div class="p-6">
+        <div :class="sidebarCollapsed ? 'p-3' : 'p-6'">
           <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-3">
+            <div v-if="!sidebarCollapsed" class="flex items-center space-x-3">
               <div class="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
                 <span class="text-white font-bold text-sm">YN</span>
               </div>
@@ -73,8 +75,14 @@
                 <p class="text-sm text-gray-500 dark:text-gray-400">Dashboard</p>
               </div>
             </div>
-            <!-- Theme Toggle - Desktop only -->
+            <div v-else class="w-full flex justify-center">
+              <div class="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
+                <span class="text-white font-bold text-sm">YN</span>
+              </div>
+            </div>
+            <!-- Theme Toggle - Desktop only (when expanded) -->
             <button
+              v-if="!sidebarCollapsed"
               @click="toggleTheme"
               class="hidden lg:block p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
@@ -87,76 +95,130 @@
               </svg>
             </button>
           </div>
+
+          <!-- Collapse Toggle Button - Desktop only -->
+          <button
+            @click="toggleSidebar"
+            class="hidden lg:flex mt-4 w-full items-center justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          >
+            <svg
+              class="w-4 h-4 text-gray-600 dark:text-gray-300 transition-transform duration-300"
+              :class="sidebarCollapsed ? 'rotate-180' : ''"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+            <span v-if="!sidebarCollapsed" class="ml-2 text-sm text-gray-600 dark:text-gray-300">Collapse</span>
+          </button>
         </div>
 
-        <nav class="px-6 pb-6">
+        <nav :class="sidebarCollapsed ? 'px-2 pb-3' : 'px-6 pb-6'">
           <ul class="space-y-2">
             <li>
               <router-link
                 to="/"
-                class="flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors"
-                :class="$route.path === '/' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'"
+                :class="[
+                  'flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
+                  sidebarCollapsed ? 'justify-center' : '',
+                  $route.path === '/' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                ]"
+                :title="sidebarCollapsed ? 'Dashboard' : ''"
               >
-                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg :class="sidebarCollapsed ? '' : 'mr-3'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
                 </svg>
-                Dashboard
+                <span v-if="!sidebarCollapsed">Dashboard</span>
               </router-link>
             </li>
             <li>
               <router-link
                 to="/repeaters"
-                class="flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors"
-                :class="$route.path === '/repeaters' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'"
+                :class="[
+                  'flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
+                  sidebarCollapsed ? 'justify-center' : '',
+                  $route.path === '/repeaters' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                ]"
+                :title="sidebarCollapsed ? 'Repeaters' : ''"
               >
-                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg :class="sidebarCollapsed ? '' : 'mr-3'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
                 </svg>
-                Repeaters
+                <span v-if="!sidebarCollapsed">Repeaters</span>
+              </router-link>
+            </li>
+            <li>
+              <router-link
+                to="/bridges"
+                :class="[
+                  'flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
+                  sidebarCollapsed ? 'justify-center' : '',
+                  $route.path === '/bridges' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                ]"
+                :title="sidebarCollapsed ? 'Bridges' : ''"
+              >
+                <svg :class="sidebarCollapsed ? '' : 'mr-3'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                <span v-if="!sidebarCollapsed">Bridges</span>
               </router-link>
             </li>
             <li>
               <router-link
                 to="/logs"
-                class="flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors"
-                :class="$route.path === '/logs' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'"
+                :class="[
+                  'flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
+                  sidebarCollapsed ? 'justify-center' : '',
+                  $route.path === '/logs' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                ]"
+                :title="sidebarCollapsed ? 'Talk Logs' : ''"
               >
-                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg :class="sidebarCollapsed ? '' : 'mr-3'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
-                Talk Logs
+                <span v-if="!sidebarCollapsed">Talk Logs</span>
               </router-link>
             </li>
             <li v-if="authStore.isAuthenticated">
               <router-link
                 to="/settings"
-                class="flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors"
-                :class="$route.path === '/settings' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'"
+                :class="[
+                  'flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
+                  sidebarCollapsed ? 'justify-center' : '',
+                  $route.path === '/settings' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                ]"
+                :title="sidebarCollapsed ? 'Settings' : ''"
               >
-                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg :class="sidebarCollapsed ? '' : 'mr-3'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                Settings
+                <span v-if="!sidebarCollapsed">Settings</span>
               </router-link>
             </li>
             <li v-else-if="authStore.authRequired">
               <router-link
                 to="/login"
-                class="flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors"
-                :class="$route.path === '/login' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'"
+                :class="[
+                  'flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
+                  sidebarCollapsed ? 'justify-center' : '',
+                  $route.path === '/login' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                ]"
+                :title="sidebarCollapsed ? 'Sign In' : ''"
               >
-                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg :class="sidebarCollapsed ? '' : 'mr-3'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                 </svg>
-                Sign In
+                <span v-if="!sidebarCollapsed">Sign In</span>
               </router-link>
             </li>
           </ul>
 
           <!-- Authentication Status -->
-          <div v-if="authStore.authRequired" class="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+          <div v-if="authStore.authRequired && !sidebarCollapsed" class="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
             <div v-if="authStore.isAuthenticated" class="px-3 py-2">
               <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-2">
@@ -207,9 +269,30 @@ export default {
     const route = useRoute()
     const { isDark, toggleTheme } = useTheme()
     const authStore = useAuthStore()
-    
+
     // Mobile menu state
     const mobileMenuOpen = ref(false)
+
+    // Desktop sidebar collapse state - default to collapsed (true)
+    const sidebarCollapsed = ref(true)
+
+    // Load sidebar state from localStorage on mount
+    const loadSidebarState = () => {
+      const saved = localStorage.getItem('sidebarCollapsed')
+      if (saved !== null) {
+        sidebarCollapsed.value = saved === 'true'
+      }
+    }
+
+    // Save sidebar state to localStorage
+    const saveSidebarState = () => {
+      localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed.value))
+    }
+
+    const toggleSidebar = () => {
+      sidebarCollapsed.value = !sidebarCollapsed.value
+      saveSidebarState()
+    }
 
     const handleLogout = async () => {
       await authStore.logout()
@@ -230,9 +313,10 @@ export default {
       mobileMenuOpen.value = false
     })
 
-    // Check auth status when app loads
+    // Check auth status and load sidebar state when app loads
     onMounted(() => {
       authStore.checkAuthStatus()
+      loadSidebarState()
     })
 
     return {
@@ -242,7 +326,9 @@ export default {
       handleLogout,
       mobileMenuOpen,
       toggleMobileMenu,
-      closeMobileMenu
+      closeMobileMenu,
+      sidebarCollapsed,
+      toggleSidebar
     }
   }
 }

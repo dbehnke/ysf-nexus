@@ -120,18 +120,24 @@ func validateBridge(config *BridgeConfig) error {
 		return fmt.Errorf("invalid port: %d", config.Port)
 	}
 
-	// Skip host validation for now as it may not be reachable during tests
-	// Just do basic format validation
-	if config.Host == "" {
-		return fmt.Errorf("host cannot be empty")
+	// Permanent bridges don't need schedule/duration
+	if !config.Permanent {
+		if config.Schedule == "" {
+			return fmt.Errorf("schedule cannot be empty for non-permanent bridge")
+		}
+
+		if config.Duration <= 0 {
+			return fmt.Errorf("duration must be positive for scheduled bridge")
+		}
 	}
 
-	if config.Schedule == "" {
-		return fmt.Errorf("schedule cannot be empty")
+	// Validate retry configuration
+	if config.RetryDelay < 0 {
+		return fmt.Errorf("retry_delay cannot be negative")
 	}
 
-	if config.Duration <= 0 {
-		return fmt.Errorf("duration must be positive")
+	if config.HealthCheck < 0 {
+		return fmt.Errorf("health_check cannot be negative")
 	}
 
 	return nil

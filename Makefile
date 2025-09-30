@@ -14,6 +14,18 @@ GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
 
+# Ensure GOBIN is explicit and deterministic (use GOPATH/bin by default)
+GOPATH?=$(shell $(GOCMD) env GOPATH)
+GOBIN?=$(GOPATH)/bin
+
+# Pinned dev tool versions (update as needed for reproducible tooling)
+GOLANGCI_LINT_VERSION:=v2.5.0
+GOLANGCI_LINT_MODULE:=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+AIR_VERSION:=v1.63.0
+AIR_MODULE:=github.com/air-verse/air
+GOVULNCHECK_VERSION:=v1.1.4
+GOVULNCHECK_MODULE:=golang.org/x/vuln/cmd/govulncheck
+
 # Build targets
 .PHONY: all build clean test test-coverage test-integration test-load lint docker help frontend
 
@@ -66,12 +78,11 @@ test-load: ## Run load tests
 test-bench: ## Run benchmarks
 	$(GOTEST) -bench=. -benchmem ./...
 
-lint: ## Run linter
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run; \
-	else \
-		echo "golangci-lint not found, install with: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.63.4"; \
-	fi
+lint: ## Run linter (golangci-lint)
+	@echo "Running golangci-lint..."
+	@command -v golangci-lint >/dev/null 2>&1 || (echo "golangci-lint not found. Install with:"; echo "  curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.63.4"; exit 1)
+	@golangci-lint run ./... \
+		--timeout=5m
 
 fmt: ## Format code
 	$(GOCMD) fmt ./...
@@ -107,9 +118,24 @@ dev-full: ## Run both backend and frontend in development mode
 	@echo "Starting backend and frontend in development mode"
 	make dev & make dev-frontend
 
-install-tools: ## Install development tools
-	$(GOGET) github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	$(GOGET) github.com/cosmtrek/air@latest
+install-tools: ## Install development tools (pinned versions)
+	@echo "Installing development tools (pinned versions)"
+	@echo "golangci-lint: $(GOLANGCI_LINT_VERSION)"
+	@echo "air: $(AIR_VERSION)"
+	@echo "govulncheck: $(GOVULNCHECK_VERSION)"
+	# Use `go install` with explicit module@version for reproducible installs
+	GOBIN=$(GOBIN) $(GOCMD) install $(GOLANGCI_LINT_MODULE)@$(GOLANGCI_LINT_VERSION)
+	GOBIN=$(GOBIN) $(GOCMD) install $(AIR_MODULE)@$(AIR_VERSION)
+	GOBIN=$(GOBIN) $(GOCMD) install $(GOVULNCHECK_MODULE)@$(GOVULNCHECK_VERSION)
+
+verify-tools: ## Verify installed dev tools (quiet by default; set TOOLS_DEBUG=1 to enable)
+	@# When TOOLS_DEBUG=1 is set, print which/version for required tools.
+	@if [ "${TOOLS_DEBUG:-}" = "1" ]; then \
+		echo "Verifying installed development tools..."; \
+		command -v golangci-lint >/dev/null 2>&1 && golangci-lint --version || echo "golangci-lint: not found"; \
+		command -v govulncheck >/dev/null 2>&1 && govulncheck version || echo "govulncheck: not found"; \
+		command -v air >/dev/null 2>&1 && air --version || echo "air: not found"; \
+	fi
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
