@@ -18,7 +18,7 @@ GOMOD=$(GOCMD) mod
 GOLANGCI_LINT_VERSION:=v2.5.0
 GOLANGCI_LINT_MODULE:=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 AIR_VERSION:=v1.63.0
-AIR_MODULE:=github.com/cosmtrek/air
+AIR_MODULE:=github.com/air-verse/air
 GOVULNCHECK_VERSION:=v1.1.4
 GOVULNCHECK_MODULE:=golang.org/x/vuln/cmd/govulncheck
 
