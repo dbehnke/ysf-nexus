@@ -327,11 +327,14 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 
 		// Track bridge talker activity
 		r.processBridgeTalker(packet)
-		
+
+		// Sanitize callsigns before forwarding to local repeaters
+		sanitizedData := network.SanitizeDataPacket(packet.Data)
+
 		// Forward bridge data to all local repeaters (bridge acts as special repeater)
 		addresses := r.repeaterManager.GetAllAddresses()
 		if len(addresses) > 0 {
-			if err := r.server.BroadcastData(packet.Data, addresses, packet.Source); err != nil {
+			if err := r.server.BroadcastData(sanitizedData, addresses, packet.Source); err != nil {
 				r.logger.Error("Failed to forward bridge data to repeaters",
 					logger.String("callsign", packet.Callsign),
 					logger.Error(err))
@@ -363,9 +366,12 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 	// Process packet for statistics and state tracking using the effective callsign
 	r.repeaterManager.ProcessPacket(effectiveCallsign, packet.Source, packet.Type, len(packet.Data))
 
+	// Sanitize callsigns in the packet before broadcasting
+	sanitizedData := network.SanitizeDataPacket(packet.Data)
+
 	// Broadcast to all other repeaters
 	addresses := r.repeaterManager.GetAllAddresses()
-	if err := r.server.BroadcastData(packet.Data, addresses, packet.Source); err != nil {
+	if err := r.server.BroadcastData(sanitizedData, addresses, packet.Source); err != nil {
 		r.logger.Error("Failed to broadcast data packet",
 			logger.String("source_cs", effectiveCallsign),
 			logger.Error(err))
@@ -380,7 +386,8 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 	}
 
 	// Forward local repeater traffic to all bridges (bidirectional bridge forwarding)
-	r.forwardToBridges(packet.Data, effectiveCallsign)
+	// Use already sanitized data to avoid sending suffixes to bridges
+	r.forwardToBridges(sanitizedData, effectiveCallsign)
 
 	return nil
 }
