@@ -14,6 +14,14 @@ GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
 
+# Pinned dev tool versions (update as needed for reproducible tooling)
+GOLANGCI_LINT_VERSION:=v1.63.4
+GOLANGCI_LINT_MODULE:=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+AIR_VERSION:=v1.40.0
+AIR_MODULE:=github.com/cosmtrek/air
+GOVULNCHECK_VERSION:=v0.1.0
+GOVULNCHECK_MODULE:=golang.org/x/vuln/cmd/govulncheck
+
 # Build targets
 .PHONY: all build clean test test-coverage test-integration test-load lint docker help frontend
 
@@ -106,9 +114,15 @@ dev-full: ## Run both backend and frontend in development mode
 	@echo "Starting backend and frontend in development mode"
 	make dev & make dev-frontend
 
-install-tools: ## Install development tools
-	$(GOGET) github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	$(GOGET) github.com/cosmtrek/air@latest
+install-tools: ## Install development tools (pinned versions)
+	@echo "Installing development tools (pinned versions)"
+	@echo "golangci-lint: $(GOLANGCI_LINT_VERSION)"
+	@echo "air: $(AIR_VERSION)"
+	@echo "govulncheck: $(GOVULNCHECK_VERSION)"
+	# Use `go install` with explicit module@version for reproducible installs
+	$(GOCMD) install $(GOLANGCI_LINT_MODULE)@$(GOLANGCI_LINT_VERSION)
+	$(GOCMD) install $(AIR_MODULE)@$(AIR_VERSION)
+	$(GOCMD) install $(GOVULNCHECK_MODULE)@$(GOVULNCHECK_VERSION)
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'

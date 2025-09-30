@@ -16,23 +16,9 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: Install govulncheck
+      - name: Install dev tools and run govulncheck
         run: |
-          echo "Installing govulncheck@latest"
-          export GOBIN="$RUNNER_TEMP/gobin"
-          mkdir -p "$GOBIN"
-          export PATH="$GOBIN:$PATH"
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          GOV_BIN="$GOBIN/govulncheck"
-          echo "built: $GOV_BIN"
-          if [ ! -f "$GOV_BIN" ]; then
-            echo "govulncheck binary not found at $GOV_BIN" >&2
-            exit 1
-          fi
-          echo "$GOBIN" >> "$GITHUB_PATH"
-
-      - name: Run govulncheck
-        run: |
+          make install-tools
           # Locate the module root (where go.mod lives). The repository layout
           # may place the module at the repo root or in a subdirectory named
           # `ysf-nexus` (or other). Detect it robustly and cd there.
@@ -41,7 +27,6 @@ jobs:
           elif [ -f ysf-nexus/go.mod ]; then
             MODROOT=ysf-nexus
           else
-            # Try to find any go.mod in the tree and use its directory
             MODPATH=$(git ls-files | grep -m1 '^.*/go.mod' || true)
             if [ -n "$MODPATH" ]; then
               MODROOT=$(dirname "$MODPATH")
