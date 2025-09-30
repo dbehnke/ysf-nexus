@@ -128,6 +128,15 @@ install-tools: ## Install development tools (pinned versions)
 	GOBIN=$(GOBIN) $(GOCMD) install $(AIR_MODULE)@$(AIR_VERSION)
 	GOBIN=$(GOBIN) $(GOCMD) install $(GOVULNCHECK_MODULE)@$(GOVULNCHECK_VERSION)
 
+verify-tools: ## Verify installed dev tools (quiet by default; set TOOLS_DEBUG=1 to enable)
+	@# When TOOLS_DEBUG=1 is set, print which/version for required tools.
+	@if [ "${TOOLS_DEBUG:-}" = "1" ]; then \
+		echo "Verifying installed development tools..."; \
+		command -v golangci-lint >/dev/null 2>&1 && golangci-lint --version || echo "golangci-lint: not found"; \
+		command -v govulncheck >/dev/null 2>&1 && govulncheck version || echo "govulncheck: not found"; \
+		command -v air >/dev/null 2>&1 && air --version || echo "air: not found"; \
+	fi
+
 help: ## Show this help message
 	@echo 'Usage: make [target]'
 	@echo ''

@@ -41,9 +41,9 @@ func (m *YsfNexus) Lint(ctx context.Context, source *dagger.Directory) (string, 
 		// Use the project's Makefile to install and run linting tools so behavior
 		// matches CI and local development (`make install-tools` installs pinned
 		// tool versions, `make lint` runs golangci-lint).
-		WithExec([]string{"make", "install-tools"}).
-		// Smoke-check installed linter presence/version for easier debugging
-		WithExec([]string{"sh", "-lc", "export PATH=/usr/local/go/bin:/go/bin:$HOME/go/bin:$PATH && which golangci-lint || true && golangci-lint --version || true && make lint"}).
+	WithExec([]string{"make", "install-tools"}).
+	// Run verify-tools (prints versions only when TOOLS_DEBUG=1) and then run lint.
+	WithExec([]string{"sh", "-lc", "export PATH=/usr/local/go/bin:/go/bin:$HOME/go/bin:$PATH && TOOLS_DEBUG=${TOOLS_DEBUG:-} make verify-tools && make lint"}).
 		Stdout(ctx)
 }
 
@@ -53,8 +53,8 @@ func (m *YsfNexus) Vuln(ctx context.Context, source *dagger.Directory) (string, 
 		// Install dev tools via Makefile (includes govulncheck) then run the
 		// vulnerability scanner from the module root.
 		WithExec([]string{"make", "install-tools"}).
-	// Smoke-check govulncheck presence/version and then run the scan.
-	WithExec([]string{"sh", "-lc", "export PATH=/usr/local/go/bin:/go/bin:$HOME/go/bin:$PATH && which govulncheck || true && govulncheck version || true && govulncheck ./..."}).
+	// Run verify-tools (prints versions only when TOOLS_DEBUG=1) then run govulncheck.
+	WithExec([]string{"sh", "-lc", "export PATH=/usr/local/go/bin:/go/bin:$HOME/go/bin:$PATH && TOOLS_DEBUG=${TOOLS_DEBUG:-} make verify-tools && govulncheck ./..."}).
 		Stdout(ctx)
 }
 
