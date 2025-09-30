@@ -15,7 +15,7 @@ type MockUDPConn struct {
 	responses  [][]byte
 	closed     bool
 	mu         sync.RWMutex
-	
+
 	// Channels for packet flow
 	incomingPackets chan PacketData
 	outgoingPackets chan PacketData
@@ -32,12 +32,12 @@ func NewMockUDPConn(local, remote string) (*MockUDPConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	remoteAddr, err := net.ResolveUDPAddr("udp", remote)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &MockUDPConn{
 		localAddr:       localAddr,
 		remoteAddr:      remoteAddr,
@@ -56,7 +56,7 @@ func (c *MockUDPConn) Read(b []byte) (int, error) {
 		return 0, fmt.Errorf("connection closed")
 	}
 	c.mu.RUnlock()
-	
+
 	// Wait for incoming packet
 	select {
 	case packet := <-c.incomingPackets:
@@ -71,23 +71,23 @@ func (c *MockUDPConn) Read(b []byte) (int, error) {
 func (c *MockUDPConn) Write(b []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	if c.closed {
 		return 0, fmt.Errorf("connection closed")
 	}
-	
+
 	// Store the packet
 	packet := make([]byte, len(b))
 	copy(packet, b)
 	c.packets = append(c.packets, packet)
-	
+
 	// Send to outgoing channel
 	select {
 	case c.outgoingPackets <- PacketData{Data: packet, Addr: c.remoteAddr}:
 	default:
 		// Channel full, drop packet (simulate network drop)
 	}
-	
+
 	return len(b), nil
 }
 
@@ -99,7 +99,7 @@ func (c *MockUDPConn) ReadFromUDP(b []byte) (int, *net.UDPAddr, error) {
 		return 0, nil, fmt.Errorf("connection closed")
 	}
 	c.mu.RUnlock()
-	
+
 	select {
 	case packet := <-c.incomingPackets:
 		n := copy(b, packet.Data)
@@ -113,21 +113,21 @@ func (c *MockUDPConn) ReadFromUDP(b []byte) (int, *net.UDPAddr, error) {
 func (c *MockUDPConn) WriteToUDP(b []byte, addr *net.UDPAddr) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	if c.closed {
 		return 0, fmt.Errorf("connection closed")
 	}
-	
+
 	packet := make([]byte, len(b))
 	copy(packet, b)
 	c.packets = append(c.packets, packet)
-	
+
 	// Send to outgoing channel with specific address
 	select {
 	case c.outgoingPackets <- PacketData{Data: packet, Addr: addr}:
 	default:
 	}
-	
+
 	return len(b), nil
 }
 
@@ -135,7 +135,7 @@ func (c *MockUDPConn) WriteToUDP(b []byte, addr *net.UDPAddr) (int, error) {
 func (c *MockUDPConn) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	if !c.closed {
 		c.closed = true
 		close(c.incomingPackets)
@@ -173,7 +173,7 @@ func (c *MockUDPConn) SetWriteDeadline(t time.Time) error {
 func (c *MockUDPConn) InjectPacket(data []byte, fromAddr *net.UDPAddr) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	if !c.closed {
 		select {
 		case c.incomingPackets <- PacketData{Data: data, Addr: fromAddr}:
@@ -186,7 +186,7 @@ func (c *MockUDPConn) InjectPacket(data []byte, fromAddr *net.UDPAddr) {
 func (c *MockUDPConn) GetSentPackets() [][]byte {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	result := make([][]byte, len(c.packets))
 	for i, packet := range c.packets {
 		result[i] = make([]byte, len(packet))
@@ -204,7 +204,7 @@ func (c *MockUDPConn) GetOutgoingPackets() <-chan PacketData {
 func (c *MockUDPConn) ClearPackets() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.packets = c.packets[:0]
 }
 
@@ -215,7 +215,7 @@ type MockUDPServer struct {
 	packets     []PacketData
 	running     bool
 	mu          sync.RWMutex
-	
+
 	// Packet routing
 	packetHandler func(data []byte, from *net.UDPAddr)
 }
@@ -226,7 +226,7 @@ func NewMockUDPServer(address string) (*MockUDPServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &MockUDPServer{
 		addr:        addr,
 		connections: make(map[string]*MockUDPConn),
@@ -245,7 +245,7 @@ func (s *MockUDPServer) Start() {
 func (s *MockUDPServer) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.running = false
 	for _, conn := range s.connections {
 		if err := conn.Close(); err != nil {
@@ -261,10 +261,10 @@ func (s *MockUDPServer) AddConnection(remoteAddr string) (*MockUDPConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.connections[remoteAddr] = conn
 	return conn, nil
 }
@@ -273,12 +273,12 @@ func (s *MockUDPServer) AddConnection(remoteAddr string) (*MockUDPConn, error) {
 func (s *MockUDPServer) SendPacketToConnection(remoteAddr string, data []byte) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	conn, exists := s.connections[remoteAddr]
 	if !exists {
 		return fmt.Errorf("connection not found: %s", remoteAddr)
 	}
-	
+
 	addr, _ := net.ResolveUDPAddr("udp", remoteAddr)
 	conn.InjectPacket(data, addr)
 	return nil
@@ -295,7 +295,7 @@ func (s *MockUDPServer) SetPacketHandler(handler func(data []byte, from *net.UDP
 func (s *MockUDPServer) BroadcastPacket(data []byte) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	for _, conn := range s.connections {
 		conn.InjectPacket(data, s.addr)
 	}
@@ -305,7 +305,7 @@ func (s *MockUDPServer) BroadcastPacket(data []byte) {
 func (s *MockUDPServer) GetConnection(remoteAddr string) *MockUDPConn {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	return s.connections[remoteAddr]
 }
 
@@ -313,7 +313,7 @@ func (s *MockUDPServer) GetConnection(remoteAddr string) *MockUDPConn {
 func (s *MockUDPServer) GetAllConnections() map[string]*MockUDPConn {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	result := make(map[string]*MockUDPConn)
 	for k, v := range s.connections {
 		result[k] = v

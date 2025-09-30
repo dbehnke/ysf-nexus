@@ -7,41 +7,41 @@ import (
 	"sync"
 	"time"
 
-	"github.com/robfig/cron/v3"
 	"github.com/dbehnke/ysf-nexus/pkg/config"
 	"github.com/dbehnke/ysf-nexus/pkg/logger"
+	"github.com/robfig/cron/v3"
 )
 
 // Manager manages multiple bridge connections with scheduling
 type Manager struct {
-	config      []config.BridgeConfig
-	logger      *logger.Logger
-	server      NetworkServer
-	cron        *cron.Cron
-	
+	config []config.BridgeConfig
+	logger *logger.Logger
+	server NetworkServer
+	cron   *cron.Cron
+
 	// Bridge tracking
 	mu      sync.RWMutex
 	bridges map[string]*Bridge
-	
+
 	// Schedule tracking for missed recovery
 	schedules map[string]*ScheduleInfo
-	
+
 	// Context for cancellation
 	ctx    context.Context
 	cancel context.CancelFunc
-	
+
 	// Statistics
 	stats BridgeStats
 }
 
 // ScheduleInfo tracks schedule information for missed recovery
 type ScheduleInfo struct {
-	Name           string
-	Schedule       string
-	Duration       time.Duration
-	LastExecution  *time.Time
-	NextExecution  *time.Time
-	MissedWindows  int
+	Name          string
+	Schedule      string
+	Duration      time.Duration
+	LastExecution *time.Time
+	NextExecution *time.Time
+	MissedWindows int
 }
 
 // BridgeStats tracks overall bridge statistics
@@ -83,7 +83,7 @@ type BridgeStatus struct {
 // NewManager creates a new bridge manager
 func NewManager(config []config.BridgeConfig, server NetworkServer, logger *logger.Logger) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &Manager{
 		config:    config,
 		logger:    logger,
@@ -99,22 +99,22 @@ func NewManager(config []config.BridgeConfig, server NetworkServer, logger *logg
 // Start initializes and starts all configured bridges
 func (m *Manager) Start() error {
 	m.logger.Info("Starting bridge manager")
-	
+
 	for _, bridgeConfig := range m.config {
 		if err := m.setupBridge(bridgeConfig); err != nil {
-			m.logger.Error("Failed to setup bridge", 
-				logger.String("name", bridgeConfig.Name), 
+			m.logger.Error("Failed to setup bridge",
+				logger.String("name", bridgeConfig.Name),
 				logger.Error(err))
 			continue
 		}
 	}
-	
+
 	// Start the cron scheduler
 	m.cron.Start()
-	
+
 	// Start the missed schedule recovery checker
 	go m.runMissedScheduleRecovery()
-	
+
 	m.logger.Info("Bridge manager started", logger.Int("bridges", len(m.bridges)))
 	return nil
 }
@@ -123,7 +123,7 @@ func (m *Manager) Start() error {
 func (m *Manager) runMissedScheduleRecovery() {
 	ticker := time.NewTicker(1 * time.Minute) // Check every minute
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-m.ctx.Done():
@@ -149,7 +149,7 @@ func (m *Manager) setupBridge(config config.BridgeConfig) error {
 	} else if config.Schedule != "" {
 		// Set up schedule tracking for missed recovery
 		m.setupScheduleTracking(config)
-		
+
 		// Schedule the bridge using cron
 		_, err := m.cron.AddFunc(config.Schedule, func() {
 			m.startScheduledBridge(config.Name, config.Duration)
@@ -157,18 +157,18 @@ func (m *Manager) setupBridge(config config.BridgeConfig) error {
 		if err != nil {
 			return fmt.Errorf("failed to schedule bridge %s: %w", config.Name, err)
 		}
-		
-		m.logger.Info("Scheduled bridge", 
-			logger.String("name", config.Name), 
+
+		m.logger.Info("Scheduled bridge",
+			logger.String("name", config.Name),
 			logger.String("schedule", config.Schedule))
-		
+
 		// Check if we should start this bridge now (missed schedule recovery)
 		if m.shouldStartNow(config) {
 			m.logger.Info("Recovering missed schedule", logger.String("name", config.Name))
 			go m.startScheduledBridge(config.Name, config.Duration)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -208,13 +208,13 @@ func (m *Manager) shouldStartNow(config config.BridgeConfig) bool {
 	if err != nil {
 		return false
 	}
-	
+
 	now := time.Now()
-	
+
 	// Look back to see if we missed a recent schedule
 	// Check the last 2 hours for potential missed schedules
 	checkFrom := now.Add(-2 * time.Hour)
-	
+
 	// Find the most recent scheduled time before now
 	lastScheduled := schedule.Next(checkFrom)
 	for {
@@ -224,13 +224,13 @@ func (m *Manager) shouldStartNow(config config.BridgeConfig) bool {
 		}
 		lastScheduled = nextScheduled
 	}
-	
+
 	// Check if we're within the duration window of the last scheduled time
 	if lastScheduled.Before(now) {
 		windowEnd := lastScheduled.Add(config.Duration)
 		if now.Before(windowEnd) {
 			// We're within the scheduled window, should be running
-			m.logger.Info("Detected missed schedule within window", 
+			m.logger.Info("Detected missed schedule within window",
 				logger.String("name", config.Name),
 				logger.Any("scheduled_at", lastScheduled),
 				logger.Any("window_ends", windowEnd),
@@ -238,7 +238,7 @@ func (m *Manager) shouldStartNow(config config.BridgeConfig) bool {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -306,18 +306,18 @@ func (m *Manager) checkMissedSchedules() {
 		schedules = append(schedules, sched)
 	}
 	m.mu.RUnlock()
-	
+
 	for _, schedInfo := range schedules {
 		if m.shouldRecoverSchedule(schedInfo) {
-			m.logger.Info("Recovering missed schedule", 
+			m.logger.Info("Recovering missed schedule",
 				logger.String("name", schedInfo.Name),
 				logger.Any("last_execution", schedInfo.LastExecution))
-			
+
 			m.mu.Lock()
 			schedInfo.MissedWindows++
 			m.stats.MissedSchedules++
 			m.mu.Unlock()
-			
+
 			// Find the bridge config to get duration
 			var bridgeConfig *config.BridgeConfig
 			for _, cfg := range m.config {
@@ -326,7 +326,7 @@ func (m *Manager) checkMissedSchedules() {
 					break
 				}
 			}
-			
+
 			if bridgeConfig != nil {
 				go m.startScheduledBridge(schedInfo.Name, bridgeConfig.Duration)
 			}
@@ -341,15 +341,15 @@ func (m *Manager) shouldRecoverSchedule(schedInfo *ScheduleInfo) bool {
 	if err != nil {
 		return false
 	}
-	
+
 	now := time.Now()
-	
+
 	// If we have a last execution time, use it as reference
 	checkFrom := now.Add(-1 * time.Hour) // Default to 1 hour back
 	if schedInfo.LastExecution != nil {
 		checkFrom = *schedInfo.LastExecution
 	}
-	
+
 	// Find the most recent scheduled time that we might have missed
 	lastScheduled := schedule.Next(checkFrom)
 	for {
@@ -359,7 +359,7 @@ func (m *Manager) shouldRecoverSchedule(schedInfo *ScheduleInfo) bool {
 		}
 		lastScheduled = nextScheduled
 	}
-	
+
 	// Check if we're within the duration window of a missed schedule
 	if lastScheduled.After(checkFrom) && lastScheduled.Before(now) {
 		windowEnd := lastScheduled.Add(schedInfo.Duration)
@@ -368,7 +368,7 @@ func (m *Manager) shouldRecoverSchedule(schedInfo *ScheduleInfo) bool {
 			m.mu.RLock()
 			bridge, exists := m.bridges[schedInfo.Name]
 			m.mu.RUnlock()
-			
+
 			if exists {
 				status := bridge.GetStatus()
 				// Only recover if the bridge is not currently connected or scheduled
@@ -378,7 +378,7 @@ func (m *Manager) shouldRecoverSchedule(schedInfo *ScheduleInfo) bool {
 			}
 		}
 	}
-	
+
 	return false
 }
 
@@ -388,13 +388,13 @@ func (m *Manager) shouldRecoverSchedule(schedInfo *ScheduleInfo) bool {
 // Stop stops all bridges and the scheduler
 func (m *Manager) Stop() {
 	m.logger.Info("Stopping bridge manager")
-	
+
 	// Stop the scheduler
 	m.cron.Stop()
-	
+
 	// Cancel all bridge contexts
 	m.cancel()
-	
+
 	m.logger.Info("Bridge manager stopped")
 }
 
@@ -402,12 +402,12 @@ func (m *Manager) Stop() {
 func (m *Manager) GetStatus() map[string]BridgeStatus {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	status := make(map[string]BridgeStatus)
 	for name, bridge := range m.bridges {
 		status[name] = bridge.GetStatus()
 	}
-	
+
 	return status
 }
 
@@ -415,7 +415,7 @@ func (m *Manager) GetStatus() map[string]BridgeStatus {
 func (m *Manager) GetBridge(name string) *Bridge {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	return m.bridges[name]
 }
 
@@ -423,7 +423,7 @@ func (m *Manager) GetBridge(name string) *Bridge {
 func (m *Manager) IsBridgeAddress(addr *net.UDPAddr) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	for _, bridge := range m.bridges {
 		if bridge.IsConnectedTo(addr) {
 			return true
@@ -437,23 +437,23 @@ func (m *Manager) HandleIncomingPacket(data []byte, fromAddr *net.UDPAddr) {
 	// Forward packets from bridge connections to all local repeaters
 	// This will be called by the network server when it receives packets
 	// from addresses that are known bridge connections
-	
+
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	// Find which bridge this packet came from
 	for _, bridge := range m.bridges {
 		if bridge.IsConnectedTo(fromAddr) {
-			m.logger.Debug("Received packet from bridge", 
-				logger.String("bridge", bridge.GetName()), 
-				logger.String("addr", fromAddr.String()), 
+			m.logger.Debug("Received packet from bridge",
+				logger.String("bridge", bridge.GetName()),
+				logger.String("addr", fromAddr.String()),
 				logger.Int("size", len(data)))
-			
+
 			bridge.IncrementRxStats(uint64(len(data)))
-			
+
 			// Notify bridge of received packet (for ping response handling)
 			bridge.OnPacketReceived(data)
-			
+
 			// TODO: Forward to local repeaters (implement packet routing)
 			// This would integrate with the main reflector's packet routing system
 			break
@@ -465,7 +465,7 @@ func (m *Manager) HandleIncomingPacket(data []byte, fromAddr *net.UDPAddr) {
 func (m *Manager) GetConnectedAddresses() []*net.UDPAddr {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	var addresses []*net.UDPAddr
 	for _, bridge := range m.bridges {
 		if bridge.IsConnected() {

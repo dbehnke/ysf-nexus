@@ -62,9 +62,9 @@ func TestSimulateBridgeActivity(t *testing.T) {
 	if err != nil {
 		t.Logf("API call failed (after stop): %v", err)
 	} else {
-	body2, _ := io.ReadAll(resp2.Body)
-	_ = resp2.Body.Close()
-	t.Logf("API Response (after stop): %s", string(body2))
+		body2, _ := io.ReadAll(resp2.Body)
+		_ = resp2.Body.Close()
+		t.Logf("API Response (after stop): %s", string(body2))
 	}
 
 	// Start random activity for a short period
@@ -75,8 +75,8 @@ func TestSimulateBridgeActivity(t *testing.T) {
 	if err != nil {
 		t.Logf("API call failed (after random): %v", err)
 	} else {
-	body3, _ := io.ReadAll(resp3.Body)
-	_ = resp3.Body.Close()
-	t.Logf("API Response (after random): %s", string(body3))
+		body3, _ := io.ReadAll(resp3.Body)
+		_ = resp3.Body.Close()
+		t.Logf("API Response (after random): %s", string(body3))
 	}
 }
