@@ -17,6 +17,7 @@ type Config struct {
 	Blocklist BlocklistConfig `mapstructure:"blocklist"`
 	Logging   LoggingConfig   `mapstructure:"logging"`
 	Metrics   MetricsConfig   `mapstructure:"metrics"`
+	YSF2DMR   YSF2DMRConfig   `mapstructure:"ysf2dmr"`
 }
 
 // ServerConfig holds YSF server configuration
@@ -97,6 +98,66 @@ type PrometheusConfig struct {
 	Enabled bool   `mapstructure:"enabled"`
 	Port    int    `mapstructure:"port"`
 	Path    string `mapstructure:"path"`
+}
+
+// YSF2DMRConfig holds YSF2DMR bridge configuration
+type YSF2DMRConfig struct {
+	Enabled bool            `mapstructure:"enabled"`
+	YSF     YSF2DMRYSFConfig `mapstructure:"ysf"`
+	DMR     YSF2DMRDMRConfig `mapstructure:"dmr"`
+	Lookup  DMRLookupConfig  `mapstructure:"lookup"`
+	Audio   AudioConfig      `mapstructure:"audio"`
+}
+
+// YSF2DMRYSFConfig holds YSF-side configuration for YSF2DMR
+type YSF2DMRYSFConfig struct {
+	Callsign     string        `mapstructure:"callsign"`
+	Suffix       string        `mapstructure:"suffix"`
+	LocalAddress string        `mapstructure:"local_address"`
+	LocalPort    int           `mapstructure:"local_port"`
+	EnableWiresX bool          `mapstructure:"enable_wiresx"`
+	HangTime     time.Duration `mapstructure:"hang_time"`
+}
+
+// YSF2DMRDMRConfig holds DMR network configuration for YSF2DMR
+type YSF2DMRDMRConfig struct {
+	Enabled           bool          `mapstructure:"enabled"`
+	ID                uint32        `mapstructure:"id"`
+	Network           string        `mapstructure:"network"`
+	Address           string        `mapstructure:"address"`
+	Port              int           `mapstructure:"port"`
+	Password          string        `mapstructure:"password"`
+	StartupTG         uint32        `mapstructure:"startup_tg"`
+	Slot              uint8         `mapstructure:"slot"`
+	ColorCode         uint8         `mapstructure:"color_code"`
+	EnablePrivateCall bool          `mapstructure:"enable_private_call"`
+	RXFreq            uint32        `mapstructure:"rx_freq"`
+	TXFreq            uint32        `mapstructure:"tx_freq"`
+	TXPower           uint32        `mapstructure:"tx_power"`
+	Latitude          float32       `mapstructure:"latitude"`
+	Longitude         float32       `mapstructure:"longitude"`
+	Height            int32         `mapstructure:"height"`
+	Location          string        `mapstructure:"location"`
+	Description       string        `mapstructure:"description"`
+	URL               string        `mapstructure:"url"`
+	PingInterval      time.Duration `mapstructure:"ping_interval"`
+	AuthTimeout       time.Duration `mapstructure:"auth_timeout"`
+}
+
+// DMRLookupConfig holds DMR ID lookup configuration
+type DMRLookupConfig struct {
+	Enabled         bool          `mapstructure:"enabled"`
+	DMRIDFile       string        `mapstructure:"dmr_id_file"`
+	AutoDownload    bool          `mapstructure:"auto_download"`
+	DownloadURL     string        `mapstructure:"download_url"`
+	RefreshInterval time.Duration `mapstructure:"refresh_interval"`
+}
+
+// AudioConfig holds audio conversion configuration
+type AudioConfig struct {
+	Gain         float32 `mapstructure:"gain"`
+	VOXEnabled   bool    `mapstructure:"vox_enabled"`
+	VOXThreshold float32 `mapstructure:"vox_threshold"`
 }
 
 // Load loads configuration from file and environment variables
@@ -191,4 +252,27 @@ func setDefaults() {
 	viper.SetDefault("bridges.max_retries", 0)      // 0 = infinite retries
 	viper.SetDefault("bridges.retry_delay", "30s")  // Start with 30 second delay
 	viper.SetDefault("bridges.health_check", "60s") // Check connection every minute
+
+	// YSF2DMR defaults
+	viper.SetDefault("ysf2dmr.enabled", false)
+	viper.SetDefault("ysf2dmr.ysf.callsign", "YSF2DMR")
+	viper.SetDefault("ysf2dmr.ysf.local_address", "0.0.0.0")
+	viper.SetDefault("ysf2dmr.ysf.local_port", 42001)
+	viper.SetDefault("ysf2dmr.ysf.enable_wiresx", false)
+	viper.SetDefault("ysf2dmr.ysf.hang_time", "5s")
+	viper.SetDefault("ysf2dmr.dmr.enabled", true)
+	viper.SetDefault("ysf2dmr.dmr.slot", 2)
+	viper.SetDefault("ysf2dmr.dmr.color_code", 1)
+	viper.SetDefault("ysf2dmr.dmr.startup_tg", 91)
+	viper.SetDefault("ysf2dmr.dmr.enable_private_call", false)
+	viper.SetDefault("ysf2dmr.dmr.ping_interval", "10s")
+	viper.SetDefault("ysf2dmr.dmr.auth_timeout", "30s")
+	viper.SetDefault("ysf2dmr.dmr.tx_power", 1)
+	viper.SetDefault("ysf2dmr.lookup.enabled", true)
+	viper.SetDefault("ysf2dmr.lookup.auto_download", false)
+	viper.SetDefault("ysf2dmr.lookup.download_url", "https://radioid.net/static/users.csv")
+	viper.SetDefault("ysf2dmr.lookup.refresh_interval", "24h")
+	viper.SetDefault("ysf2dmr.audio.gain", 1.0)
+	viper.SetDefault("ysf2dmr.audio.vox_enabled", false)
+	viper.SetDefault("ysf2dmr.audio.vox_threshold", 0.1)
 }
