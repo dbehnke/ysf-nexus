@@ -66,12 +66,11 @@ test-load: ## Run load tests
 test-bench: ## Run benchmarks
 	$(GOTEST) -bench=. -benchmem ./...
 
-lint: ## Run linter
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run; \
-	else \
-		echo "golangci-lint not found, install with: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.63.4"; \
-	fi
+lint: ## Run linter (golangci-lint)
+	@echo "Running golangci-lint..."
+	@command -v golangci-lint >/dev/null 2>&1 || (echo "golangci-lint not found. Install with:"; echo "  curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.63.4"; exit 1)
+	@golangci-lint run ./... \
+		--timeout=5m
 
 fmt: ## Format code
 	$(GOCMD) fmt ./...
