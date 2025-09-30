@@ -227,12 +227,18 @@ github.com/golang/mock       // Mock generation
 
 **Deliverables**: ✅ Monitoring and management capabilities
 
-### ✅ Phase 3: Bridge System (COMPLETED - per original design)
-- [x] Bridge connection infrastructure (framework exists)
-- [x] Configuration management for bridges
-- [x] **NOTE**: Full bridge scheduling system exists in design but not actively implemented in this PR
+### ✅ Phase 3: Bridge System (COMPLETED - FULLY IMPLEMENTED)
+- [x] Bridge connection infrastructure with permanent and scheduled modes
+- [x] Configuration management for bridges with cron scheduling
+- [x] Scheduled bridge support with duration-based connections
+- [x] Bridge health checking and retry logic with exponential backoff
+- [x] Real-time bridge status monitoring in web dashboard
+- [x] Bridge talker detection and routing (repeater ↔ bridge packet forwarding)
+- [x] Next schedule display with countdown timers
+- [x] Bridge context isolation (prevents bridge issues from affecting reflector)
+- [x] Comprehensive bridge event logging and debugging
 
-**Deliverables**: ✅ Bridge framework ready for expansion
+**Deliverables**: ✅ Complete bridge system with scheduling, health checks, and real-time monitoring
 
 ### ✅ Phase 4: MQTT Integration (COMPLETED)
 - [x] MQTT client with configurable broker
@@ -252,16 +258,39 @@ github.com/golang/mock       // Mock generation
 
 **Deliverables**: ✅ Production-ready application with CI/CD
 
-## 🎯 Next Steps (Post-Merge Roadmap)
+## 🎯 Recent Enhancements (v1.1.0)
+
+### Bridge System Enhancements
+- [x] **Scheduled Bridge Support**: Full cron-based scheduling with duration limits
+- [x] **Bridge Countdown Timers**: Real-time countdown to next scheduled run and end time
+- [x] **Bridge Talker Detection**: Proper callsign extraction (gateway vs source) for bridge traffic
+- [x] **Bridge Context Isolation**: Independent contexts prevent bridge failures from affecting main reflector
+- [x] **Persistent Bridge Status**: Bridges remain visible in dashboard when disconnected, showing next schedule
+- [x] **Bridge Event Pipeline**: Complete event flow from bridge packets → WebSocket → dashboard updates
+
+### Dashboard UI/UX Improvements
+- [x] **Collapsible Sidebar**: Desktop sidebar collapses to icon-only view for more dashboard space
+- [x] **Dark Mode Fixes**: Proper text contrast for badges and UI elements in dark mode
+- [x] **Bridge Status Cards**: Enhanced bridge display with state, schedule, duration, and countdowns
+- [x] **Real-time Updates**: Reliable WebSocket updates for bridge talkers and activity
+- [x] **Mobile Responsive**: Improved mobile navigation with hamburger menu
+
+### Backend Improvements
+- [x] **Event Channel Reliability**: Goroutine-based event delivery with timeout protection
+- [x] **Comprehensive Logging**: Detailed Info-level logging for bridge operations and debugging
+- [x] **YSF Protocol Fixes**: Proper YSFD packet handling for gateway vs source callsigns
+- [x] **Schedule Management**: Automatic next-schedule calculation after bridge runs complete
+
+## 🎯 Future Enhancements (Roadmap)
 
 ### Immediate Enhancements
 - [ ] Live configurability via web dashboard (tune talk_max_duration from UI)
 - [ ] CLI flags to override config file values at runtime
-- [ ] Enhanced bridge scheduler with cron expressions and health checks
+- [ ] Manual bridge start/stop controls from dashboard
 
-### Extended Features  
+### Extended Features
 - [ ] Persistent event store (SQLite/PostgreSQL) for long-term analytics
-- [ ] Advanced bridge strategies (failover, load balancing, dynamic schedules)
+- [ ] Advanced bridge strategies (failover, load balancing)
 - [ ] Performance tuning for very large deployments (1k+ repeaters)
 
 ### UI/UX Improvements
@@ -269,7 +298,7 @@ github.com/golang/mock       // Mock generation
 - [ ] Manual unmute button and visual indicators for muted repeaters
 - [ ] Real-time charts for connection trends and talk activity
 
-**Current Status**: All core phases completed. YSF Nexus is production-ready!
+**Current Status**: All core phases completed + Full bridge system with scheduling. YSF Nexus is production-ready!
 
 ## Key Features
 

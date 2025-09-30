@@ -92,6 +92,10 @@
     @apply badge bg-success-100 dark:bg-success-800/20 text-success-800 dark:text-success-400;
   }
 
+  .badge-secondary {
+    @apply badge bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300;
+  }
+
   .badge-warning {
     @apply badge bg-warning-100 dark:bg-warning-800/20 text-warning-800 dark:text-warning-400;
   }

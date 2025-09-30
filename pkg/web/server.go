@@ -288,10 +288,17 @@ func (s *Server) processEvents(ctx context.Context) {
 
 // handleEvent processes a repeater event
 func (s *Server) handleEvent(event repeater.Event) {
-	s.logger.Debug("Processing event",
+	s.logger.Info("handleEvent ENTRY",
 		logger.String("type", event.Type),
 		logger.String("callsign", event.Callsign),
+		logger.String("address", event.Address),
 		logger.Duration("duration", event.Duration))
+
+	defer func() {
+		s.logger.Info("handleEvent EXIT",
+			logger.String("type", event.Type),
+			logger.String("callsign", event.Callsign))
+	}()
 
 	switch event.Type {
 	case repeater.EventTalkEnd:
@@ -380,6 +387,10 @@ func (hub *WebSocketHub) run() {
 
 // broadcastWebSocketMessage broadcasts a message to all WebSocket clients
 func (s *Server) broadcastWebSocketMessage(messageType string, data interface{}) {
+	s.logger.Info("broadcastWebSocketMessage ENTRY",
+		logger.String("message_type", messageType),
+		logger.Any("data", data))
+
 	message := WebSocketMessage{
 		Type: messageType,
 		Data: data,
@@ -391,11 +402,19 @@ func (s *Server) broadcastWebSocketMessage(messageType string, data interface{})
 		return
 	}
 
+	s.logger.Info("broadcastWebSocketMessage: attempting to send to hub",
+		logger.String("message_type", messageType),
+		logger.Int("broadcast_channel_len", len(s.websocketHub.broadcast)),
+		logger.Int("broadcast_channel_cap", cap(s.websocketHub.broadcast)))
+
 	select {
 	case s.websocketHub.broadcast <- jsonData:
+		s.logger.Info("broadcastWebSocketMessage: message sent to broadcast channel",
+			logger.String("message_type", messageType))
 	default:
 		// Don't block if broadcast channel is full
-		s.logger.Warn("WebSocket broadcast channel full, dropping message")
+		s.logger.Warn("WebSocket broadcast channel full, dropping message",
+			logger.String("message_type", messageType))
 	}
 }
 
@@ -539,10 +558,24 @@ func (s *Server) handleBridges(w http.ResponseWriter, r *http.Request) {
 	if s.bridgeManager != nil {
 		// Use type assertion to check if it has GetStatus method with correct return type
 		if bm, ok := s.bridgeManager.(interface{ GetStatus() map[string]bridge.BridgeStatus }); ok {
-			status := bm.GetStatus()
-			// Convert to map[string]interface{} for JSON serialization
-			for name, bridgeStatus := range status {
-				bridges[name] = bridgeStatus
+			// Run GetStatus with a short timeout to avoid blocking the HTTP handler
+			type result struct {
+				status map[string]bridge.BridgeStatus
+			}
+			ch := make(chan result, 1)
+
+			go func() {
+				ch <- result{status: bm.GetStatus()}
+			}()
+
+			select {
+			case res := <-ch:
+				for name, bridgeStatus := range res.status {
+					bridges[name] = bridgeStatus
+				}
+			case <-time.After(500 * time.Millisecond):
+				s.logger.Warn("bridge manager GetStatus timed out, returning partial/empty result")
+				// leave bridges empty
 			}
 		}
 	}
@@ -579,28 +612,44 @@ func (s *Server) handleCurrentTalker(w http.ResponseWriter, r *http.Request) {
 	// No regular repeater talking, check for bridge talkers
 	if s.reflector != nil {
 		if refl, ok := s.reflector.(interface{ GetCurrentBridgeTalker() interface{} }); ok {
-			bridgeTalker := refl.GetCurrentBridgeTalker()
-			if bridgeTalker != nil {
-				// Use type assertion to extract bridge talker information
-				if bt, ok := bridgeTalker.(interface {
-					GetCallsign() string
-					GetBridgeName() string 
-					GetTalkDuration() time.Duration
-				}); ok {
-					response := map[string]interface{}{
-						"current_talker": map[string]interface{}{
-							"callsign":      bt.GetCallsign(),
-							"address":       bt.GetBridgeName(), // Show bridge name as "address" 
-							"type":          "bridge",
-							"is_talking":    true,
-							"talk_duration": int(bt.GetTalkDuration().Seconds()),
-						},
+			// Protect reflector call with a short timeout so slow reflector doesn't hang HTTP
+			type reflResult struct {
+				talker interface{}
+			}
+			ch := make(chan reflResult, 1)
+
+			go func() {
+				ch <- reflResult{talker: refl.GetCurrentBridgeTalker()}
+			}()
+
+			select {
+			case res := <-ch:
+				bridgeTalker := res.talker
+				if bridgeTalker != nil {
+					// Use type assertion to extract bridge talker information
+					if bt, ok := bridgeTalker.(interface {
+						GetCallsign() string
+						GetBridgeName() string
+						GetTalkDuration() time.Duration
+					}); ok {
+						response := map[string]interface{}{
+							"current_talker": map[string]interface{}{
+								"callsign":      bt.GetCallsign(),
+								"address":       bt.GetBridgeName(), // Show bridge name as "address" 
+								"type":          "bridge",
+								"is_talking":    true,
+								"talk_duration": int(bt.GetTalkDuration().Seconds()),
+							},
+						}
+						if err := json.NewEncoder(w).Encode(response); err != nil {
+							s.logger.Error("failed to encode JSON response", logger.Error(err))
+						}
+						return
 					}
-					if err := json.NewEncoder(w).Encode(response); err != nil {
-						s.logger.Error("failed to encode JSON response", logger.Error(err))
-					}
-					return
 				}
+			case <-time.After(500 * time.Millisecond):
+				s.logger.Warn("reflector GetCurrentBridgeTalker timed out, returning null")
+				// fall through to return null
 			}
 		}
 	}
@@ -640,6 +689,8 @@ func (s *Server) handleTalkLogs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
+		"name":           s.config.Server.Name,
+		"description":    s.config.Server.Description,
 		"version":        "dev", // This would come from build info
 		"buildTime":      "unknown",
 		"host":           s.config.Server.Host,

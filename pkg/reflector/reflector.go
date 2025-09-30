@@ -293,9 +293,17 @@ func (r *Reflector) handlePollPacket(packet *network.Packet) error {
 
 // handleDataPacket handles YSFD (data) packets
 func (r *Reflector) handleDataPacket(packet *network.Packet) error {
+	// Use source callsign if available (actual transmitter), otherwise gateway callsign
+	effectiveCallsign := packet.Callsign
+	if packet.SourceCS != "" {
+		effectiveCallsign = packet.SourceCS
+	}
+
 	r.logger.Debug("Received data packet",
-		logger.String("callsign", packet.Callsign),
-		logger.String("source", packet.Source.String()),
+		logger.String("gateway", packet.Callsign),
+		logger.String("source_cs", effectiveCallsign),
+		logger.String("dest_cs", packet.DestCS),
+		logger.String("addr", packet.Source.String()),
 		logger.Uint32("sequence", packet.GetSequence()))
 
 	// Check if this packet is from a bridge connection
@@ -304,9 +312,10 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 	// Handle bridge data packets differently
 	if r.bridgeManager.IsBridgeAddress(packet.Source) {
 		r.logger.Debug("Received data from bridge connection",
-			logger.String("callsign", packet.Callsign),
-			logger.String("source", packet.Source.String()))
-		
+			logger.String("gateway", packet.Callsign),
+			logger.String("source_cs", effectiveCallsign),
+			logger.String("addr", packet.Source.String()))
+
 		// Track bridge talker activity
 		r.processBridgeTalker(packet)
 		
@@ -336,19 +345,20 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 	rep := r.repeaterManager.GetRepeater(packet.Source)
 	if rep == nil {
 		r.logger.Warn("Data packet from unregistered repeater",
-			logger.String("callsign", packet.Callsign),
-			logger.String("source", packet.Source.String()))
+			logger.String("gateway", packet.Callsign),
+			logger.String("source_cs", effectiveCallsign),
+			logger.String("addr", packet.Source.String()))
 		return nil
 	}
 
-	// Process packet for statistics and state tracking
-	r.repeaterManager.ProcessPacket(packet.Callsign, packet.Source, packet.Type, len(packet.Data))
+	// Process packet for statistics and state tracking using the effective callsign
+	r.repeaterManager.ProcessPacket(effectiveCallsign, packet.Source, packet.Type, len(packet.Data))
 
 	// Broadcast to all other repeaters
 	addresses := r.repeaterManager.GetAllAddresses()
 	if err := r.server.BroadcastData(packet.Data, addresses, packet.Source); err != nil {
 		r.logger.Error("Failed to broadcast data packet",
-			logger.String("callsign", packet.Callsign),
+			logger.String("source_cs", effectiveCallsign),
 			logger.Error(err))
 		return err
 	}
@@ -361,36 +371,65 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 	}
 
 	// Forward local repeater traffic to all bridges (bidirectional bridge forwarding)
-	r.forwardToBridges(packet.Data, packet.Callsign)
+	r.forwardToBridges(packet.Data, effectiveCallsign)
 
 	return nil
 }
 
 // processBridgeTalker tracks bridge talker state and sends events
 func (r *Reflector) processBridgeTalker(packet *network.Packet) {
-	if packet.Callsign == "" {
+	// Use source callsign if available (actual transmitter), otherwise gateway callsign
+	effectiveCallsign := packet.Callsign
+	if packet.SourceCS != "" {
+		effectiveCallsign = packet.SourceCS
+	}
+
+	// Entry trace
+	r.logger.Info("processBridgeTalker ENTRY",
+		logger.String("gateway", packet.Callsign),
+		logger.String("source_cs", effectiveCallsign),
+		logger.String("addr", packet.Source.String()),
+		logger.Uint32("sequence", packet.GetSequence()))
+
+	defer func() {
+		r.logger.Info("processBridgeTalker EXIT",
+			logger.String("source_cs", effectiveCallsign),
+			logger.String("addr", packet.Source.String()))
+	}()
+
+	if effectiveCallsign == "" {
+		r.logger.Info("processBridgeTalker: empty callsign, returning early")
 		return
 	}
-	
+
 	// Get bridge name for this address
 	bridgeName := r.getBridgeNameByAddress(packet.Source.String())
 	if bridgeName == "" {
 		bridgeName = "bridge:" + packet.Source.String()
+		r.logger.Info("processBridgeTalker: no bridge name found, using fallback",
+			logger.String("fallback_name", bridgeName))
+	} else {
+		r.logger.Info("processBridgeTalker: bridge name resolved",
+			logger.String("bridge_name", bridgeName))
 	}
-	
-	talkerKey := packet.Callsign + ":" + bridgeName
+
+	talkerKey := effectiveCallsign + ":" + bridgeName
 	sequence := packet.GetSequence()
 	now := time.Now()
-	
+
 	r.talkersMu.Lock()
 	defer r.talkersMu.Unlock()
-	
+
 	talker, exists := r.bridgeTalkers[talkerKey]
-	
+	r.logger.Info("processBridgeTalker: talker lookup",
+		logger.String("talker_key", talkerKey),
+		logger.Any("exists", exists),
+		logger.Int("total_bridge_talkers", len(r.bridgeTalkers)))
+
 	if !exists {
 		// New talker
 		talker = &bridgeTalker{
-			callsign:     packet.Callsign,
+			callsign:     effectiveCallsign,
 			bridgeName:   bridgeName,
 			bridgeAddr:   packet.Source.String(),
 			startTime:    now,
@@ -399,39 +438,94 @@ func (r *Reflector) processBridgeTalker(packet *network.Packet) {
 			lastSequence: sequence,
 		}
 		r.bridgeTalkers[talkerKey] = talker
-		
+
 		// Send talk start event
-		r.sendBridgeEvent(repeater.EventTalkStart, packet.Callsign, bridgeName, 0)
-		
+		r.logger.Info("processBridgeTalker: new talker detected",
+			logger.String("callsign", effectiveCallsign),
+			logger.String("bridge", bridgeName),
+			logger.String("addr", packet.Source.String()),
+			logger.Uint32("sequence", sequence))
+
+		r.sendBridgeEvent(repeater.EventTalkStart, effectiveCallsign, bridgeName, 0)
+
 		r.logger.Info("Bridge talker started",
-			logger.String("callsign", packet.Callsign),
+			logger.String("callsign", effectiveCallsign),
 			logger.String("bridge", bridgeName))
 	} else {
 		// Existing talker - update last seen
+		r.logger.Info("processBridgeTalker: existing talker update",
+			logger.String("callsign", effectiveCallsign),
+			logger.String("bridge", bridgeName),
+			logger.Uint32("sequence", sequence),
+			logger.Uint32("last_sequence", talker.lastSequence))
 		talker.lastSeen = now
 		talker.lastSequence = sequence
 	}
 }
 
 // getBridgeNameByAddress returns the bridge name for the given address
-func (r *Reflector) getBridgeNameByAddress(addr string) string {
+func (r *Reflector) getBridgeNameByAddress(addr string) (result string) {
 	// Get all bridge statuses and find matching address
 	bridgeStatuses := r.bridgeManager.GetStatus()
+
+	r.logger.Info("getBridgeNameByAddress ENTRY",
+		logger.String("addr", addr),
+		logger.Int("candidate_count", len(bridgeStatuses)))
+
+	defer func() {
+		r.logger.Info("getBridgeNameByAddress EXIT",
+			logger.String("addr", addr),
+			logger.String("result", result))
+	}()
+
 	for bridgeName := range bridgeStatuses {
 		bridge := r.bridgeManager.GetBridge(bridgeName)
+		r.logger.Info("getBridgeNameByAddress: checking bridge",
+			logger.String("bridge_name", bridgeName),
+			logger.Any("bridge_nil", bridge == nil))
+
 		if bridge != nil {
 			remoteAddr := bridge.GetRemoteAddr()
-			if remoteAddr != nil && remoteAddr.String() == addr {
-				return bridgeName
+			r.logger.Info("getBridgeNameByAddress: bridge details",
+				logger.String("bridge_name", bridgeName),
+				logger.Any("remote_addr_nil", remoteAddr == nil),
+				logger.String("remote_addr", func() string {
+					if remoteAddr != nil {
+						return remoteAddr.String()
+					}
+					return "<nil>"
+				}()))
+
+			if remoteAddr != nil {
+				match := remoteAddr.String() == addr
+				r.logger.Info("getBridgeNameByAddress: address comparison",
+					logger.String("bridge_name", bridgeName),
+					logger.String("expected_addr", addr),
+					logger.String("bridge_remote_addr", remoteAddr.String()),
+					logger.Any("match", match))
+
+				if match {
+					r.logger.Info("getBridgeNameByAddress: MATCH FOUND",
+						logger.String("bridge", bridgeName))
+					result = bridgeName
+					return
+				}
 			}
 		}
 	}
-	return ""
+
+	r.logger.Info("getBridgeNameByAddress: NO MATCH FOUND", logger.String("addr", addr))
+	result = ""
+	return
 }
 
 // sendBridgeEvent sends an event to the event channel for bridge activities
 func (r *Reflector) sendBridgeEvent(eventType, callsign, bridgeIdentifier string, duration time.Duration) {
 	if r.eventChan == nil {
+		r.logger.Warn("sendBridgeEvent: eventChan is nil",
+			logger.String("event_type", eventType),
+			logger.String("callsign", callsign),
+			logger.String("bridge", bridgeIdentifier))
 		return
 	}
 
@@ -443,14 +537,32 @@ func (r *Reflector) sendBridgeEvent(eventType, callsign, bridgeIdentifier string
 		Duration:  duration,
 	}
 
-	select {
-	case r.eventChan <- event:
-	default:
-		// Don't block if event channel is full
-		r.logger.Warn("Event channel full, dropping bridge event", 
-			logger.String("event_type", eventType),
-			logger.String("callsign", callsign))
-	}
+	r.logger.Info("sendBridgeEvent: attempting to send",
+		logger.String("event_type", eventType),
+		logger.String("callsign", callsign),
+		logger.String("bridge", bridgeIdentifier),
+		logger.Int("channel_len", len(r.eventChan)),
+		logger.Int("channel_cap", cap(r.eventChan)))
+
+	// Use a goroutine to send the event with a timeout to prevent blocking
+	// This ensures critical bridge events are always sent without blocking packet processing
+	go func() {
+		select {
+		case r.eventChan <- event:
+			r.logger.Info("sendBridgeEvent: event enqueued successfully",
+				logger.String("event_type", eventType),
+				logger.String("callsign", callsign),
+				logger.String("bridge", bridgeIdentifier))
+		case <-time.After(1 * time.Second):
+			// If we can't send within 1 second, something is wrong with the event consumer
+			r.logger.Error("sendBridgeEvent: TIMEOUT sending event after 1s",
+				logger.String("event_type", eventType),
+				logger.String("callsign", callsign),
+				logger.String("bridge", bridgeIdentifier),
+				logger.Int("channel_len", len(r.eventChan)),
+				logger.Int("channel_cap", cap(r.eventChan)))
+		}
+	}()
 }
 
 // cleanupBridgeTalkers periodically checks for inactive bridge talkers
@@ -471,7 +583,7 @@ func (r *Reflector) cleanupBridgeTalkers(ctx context.Context) {
 // checkBridgeTalkerTimeouts checks for bridge talkers that have timed out
 func (r *Reflector) checkBridgeTalkerTimeouts() {
 	now := time.Now()
-	talkTimeout := 10 * time.Second // Consider talkers inactive after 10 seconds of no packets
+	talkTimeout := 3 * time.Second // Consider talkers inactive after 3 seconds of no packets (matches repeater timeout)
 	
 	r.talkersMu.Lock()
 	defer r.talkersMu.Unlock()

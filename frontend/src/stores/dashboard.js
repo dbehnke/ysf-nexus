@@ -222,7 +222,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         } else {
           endTalker = repeaters.value.find(r => r.callsign === data.data.callsign)
         }
-        
+
         if (endTalker) {
           endTalker.is_talking = false
         }
@@ -237,6 +237,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
         // Fetch current talker to check if someone else is still talking
         fetchCurrentTalker()
+
+        // Fetch updated talk logs to show the completed transmission in Recent Activity
+        fetchTalkLogs()
 
         // Stop timers if no one is talking (check after fetchCurrentTalker completes)
         setTimeout(() => {

@@ -110,12 +110,18 @@ func (b *Bridge) RunScheduled(ctx context.Context, duration time.Duration) {
 	// Create a timeout context for the scheduled duration
 	scheduleCtx, cancel := context.WithTimeout(ctx, duration)
 	defer cancel()
-	
+
+	b.logger.Info("Scheduled bridge timeout set",
+		logger.String("bridge", b.config.Name),
+		logger.Duration("duration", duration))
+
 	// Try to connect with retries during the scheduled window
 	for {
 		select {
 		case <-scheduleCtx.Done():
-			b.logger.Info("Scheduled bridge window ended")
+			b.logger.Info("Scheduled bridge window ended - disconnecting",
+				logger.String("bridge", b.config.Name),
+				logger.Duration("duration", duration))
 			b.disconnect()
 			return
 		default:
@@ -200,7 +206,9 @@ func (b *Bridge) maintainConnection(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			b.logger.Info("Bridge connection context cancelled")
+			b.logger.Info("Bridge connection context cancelled - disconnecting",
+				logger.String("bridge", b.config.Name),
+				logger.String("reason", ctx.Err().Error()))
 			b.disconnect()
 			return
 		case <-keepAliveTicker.C:
@@ -449,6 +457,7 @@ func (b *Bridge) GetStatus() BridgeStatus {
 		ConnectedAt:    b.connectedAt,
 		DisconnectedAt: b.disconnectedAt,
 		NextSchedule:   b.nextSchedule,
+		Duration:       b.config.Duration,
 		RetryCount:     b.retryCount,
 		LastError:      b.lastError,
 		PacketsRx:      b.packetsRx,
@@ -473,6 +482,12 @@ func (b *Bridge) setState(state BridgeState) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.state = state
+}
+
+func (b *Bridge) SetNextSchedule(next *time.Time) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.nextSchedule = next
 }
 
 func (b *Bridge) setConnectionError(err string) {

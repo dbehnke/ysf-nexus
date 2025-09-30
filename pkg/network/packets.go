@@ -27,11 +27,13 @@ const (
 
 // Packet represents a YSF network packet
 type Packet struct {
-	Type      string
-	Data      []byte
-	Source    *net.UDPAddr
-	Timestamp time.Time
-	Callsign  string
+	Type        string
+	Data        []byte
+	Source      *net.UDPAddr
+	Timestamp   time.Time
+	Callsign    string // Gateway/repeater callsign (bytes 4-14)
+	SourceCS    string // Source callsign for data packets (bytes 14-24)
+	DestCS      string // Destination callsign for data packets (bytes 24-34)
 }
 
 // YSFHeader represents the common YSF packet header
@@ -80,10 +82,29 @@ func ParsePacket(data []byte, addr *net.UDPAddr) (*Packet, error) {
 		Timestamp: time.Now(),
 	}
 
-	// Extract callsign if present
+	// Extract gateway/repeater callsign (bytes 4-14) if present
 	if len(data) >= 14 {
 		callsign := strings.TrimSpace(string(data[4:14]))
 		packet.Callsign = strings.TrimRight(callsign, "\x00")
+	}
+
+	// Extract source and destination callsigns for data packets
+	if packet.Type == PacketTypeData && len(data) >= 34 {
+		// Source callsign (bytes 14-24)
+		sourceCS := strings.TrimSpace(string(data[14:24]))
+		sourceCS = strings.TrimRight(sourceCS, "\x00")
+		// Only set if not all spaces (which means no source callsign)
+		if sourceCS != "" && sourceCS != "          " {
+			packet.SourceCS = sourceCS
+		}
+
+		// Destination callsign (bytes 24-34)
+		destCS := strings.TrimSpace(string(data[24:34]))
+		destCS = strings.TrimRight(destCS, "\x00")
+		// Only set if not all spaces (which means no destination callsign)
+		if destCS != "" && destCS != "          " {
+			packet.DestCS = destCS
+		}
 	}
 
 	// Validate packet type and size
@@ -195,6 +216,10 @@ func (p *Packet) GetSequence() uint32 {
 
 // String returns a string representation of the packet
 func (p *Packet) String() string {
+	if p.SourceCS != "" {
+		return fmt.Sprintf("Packet{Type: %s, Gateway: %s, Source: %s, Dest: %s, Addr: %s, Size: %d}",
+			p.Type, p.Callsign, p.SourceCS, p.DestCS, p.Source, len(p.Data))
+	}
 	return fmt.Sprintf("Packet{Type: %s, Callsign: %s, Source: %s, Size: %d}",
 		p.Type, p.Callsign, p.Source, len(p.Data))
 }

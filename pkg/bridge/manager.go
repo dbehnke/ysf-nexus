@@ -66,17 +66,18 @@ const (
 
 // BridgeStatus holds runtime status information for a bridge
 type BridgeStatus struct {
-	Name           string      `json:"name"`
-	State          BridgeState `json:"state"`
-	ConnectedAt    *time.Time  `json:"connected_at,omitempty"`
-	DisconnectedAt *time.Time  `json:"disconnected_at,omitempty"`
-	NextSchedule   *time.Time  `json:"next_schedule,omitempty"`
-	RetryCount     int         `json:"retry_count"`
-	LastError      string      `json:"last_error,omitempty"`
-	PacketsRx      uint64      `json:"packets_rx"`
-	PacketsTx      uint64      `json:"packets_tx"`
-	BytesRx        uint64      `json:"bytes_rx"`
-	BytesTx        uint64      `json:"bytes_tx"`
+	Name           string        `json:"name"`
+	State          BridgeState   `json:"state"`
+	ConnectedAt    *time.Time    `json:"connected_at,omitempty"`
+	DisconnectedAt *time.Time    `json:"disconnected_at,omitempty"`
+	NextSchedule   *time.Time    `json:"next_schedule,omitempty"`
+	Duration       time.Duration `json:"duration,omitempty"`
+	RetryCount     int           `json:"retry_count"`
+	LastError      string        `json:"last_error,omitempty"`
+	PacketsRx      uint64        `json:"packets_rx"`
+	PacketsTx      uint64        `json:"packets_tx"`
+	BytesRx        uint64        `json:"bytes_rx"`
+	BytesTx        uint64        `json:"bytes_tx"`
 }
 
 // NewManager creates a new bridge manager
@@ -136,11 +137,11 @@ func (m *Manager) runMissedScheduleRecovery() {
 // setupBridge configures a bridge based on its type (permanent or scheduled)
 func (m *Manager) setupBridge(config config.BridgeConfig) error {
 	bridge := NewBridge(config, m.server, m.logger)
-	
+
 	m.mu.Lock()
 	m.bridges[config.Name] = bridge
 	m.mu.Unlock()
-	
+
 	if config.Permanent {
 		// Start permanent bridge immediately
 		go bridge.RunPermanent(m.ctx)
@@ -176,21 +177,26 @@ func (m *Manager) setupScheduleTracking(config config.BridgeConfig) {
 	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 	schedule, err := parser.Parse(config.Schedule)
 	if err != nil {
-		m.logger.Error("Failed to parse schedule for tracking", 
-			logger.String("name", config.Name), 
+		m.logger.Error("Failed to parse schedule for tracking",
+			logger.String("name", config.Name),
 			logger.Error(err))
 		return
 	}
-	
+
 	now := time.Now()
 	nextRun := schedule.Next(now)
-	
+
 	m.mu.Lock()
 	m.schedules[config.Name] = &ScheduleInfo{
 		Name:          config.Name,
 		Schedule:      config.Schedule,
 		Duration:      config.Duration,
 		NextExecution: &nextRun,
+	}
+
+	// Update the bridge's nextSchedule field
+	if bridge, ok := m.bridges[config.Name]; ok {
+		bridge.SetNextSchedule(&nextRun)
 	}
 	m.mu.Unlock()
 }
@@ -241,37 +247,53 @@ func (m *Manager) startScheduledBridge(name string, duration time.Duration) {
 	m.mu.RLock()
 	bridge, exists := m.bridges[name]
 	m.mu.RUnlock()
-	
+
 	if !exists {
 		m.logger.Error("Attempted to start unknown bridge", logger.String("name", name))
 		return
 	}
-	
-	// Update schedule tracking
-	m.updateScheduleExecution(name)
-	
-	m.logger.Info("Starting scheduled bridge", 
-		logger.String("name", name), 
+
+	m.logger.Info("Starting scheduled bridge",
+		logger.String("name", name),
 		logger.Duration("duration", duration))
-	
-	// Run the bridge for the scheduled duration
-	go bridge.RunScheduled(m.ctx, duration)
+
+	// Create an independent context for this bridge that won't affect the manager
+	// The bridge will manage its own timeout via RunScheduled's WithTimeout
+	bridgeCtx, cancel := context.WithCancel(context.Background())
+
+	// Run the bridge for the scheduled duration in a goroutine
+	go func() {
+		defer cancel() // Clean up context when bridge completes
+
+		bridge.RunScheduled(bridgeCtx, duration)
+
+		// After the bridge completes, update the next schedule time
+		m.updateScheduleExecution(name)
+
+		m.logger.Info("Scheduled bridge completed, next run scheduled",
+			logger.String("name", name))
+	}()
 }
 
 // updateScheduleExecution updates the schedule tracking information
 func (m *Manager) updateScheduleExecution(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if schedInfo, exists := m.schedules[name]; exists {
 		now := time.Now()
 		schedInfo.LastExecution = &now
-		
+
 		// Calculate next execution time
 		parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 		if schedule, err := parser.Parse(schedInfo.Schedule); err == nil {
 			next := schedule.Next(now)
 			schedInfo.NextExecution = &next
+
+			// Update the bridge's nextSchedule field so it shows in status
+			if bridge, ok := m.bridges[name]; ok {
+				bridge.SetNextSchedule(&next)
+			}
 		}
 	}
 }
