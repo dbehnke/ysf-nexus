@@ -14,6 +14,10 @@ GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
 
+# Ensure GOBIN is explicit and deterministic (use GOPATH/bin by default)
+GOPATH?=$(shell $(GOCMD) env GOPATH)
+GOBIN?=$(GOPATH)/bin
+
 # Pinned dev tool versions (update as needed for reproducible tooling)
 GOLANGCI_LINT_VERSION:=v2.5.0
 GOLANGCI_LINT_MODULE:=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
@@ -120,9 +124,9 @@ install-tools: ## Install development tools (pinned versions)
 	@echo "air: $(AIR_VERSION)"
 	@echo "govulncheck: $(GOVULNCHECK_VERSION)"
 	# Use `go install` with explicit module@version for reproducible installs
-	$(GOCMD) install $(GOLANGCI_LINT_MODULE)@$(GOLANGCI_LINT_VERSION)
-	$(GOCMD) install $(AIR_MODULE)@$(AIR_VERSION)
-	$(GOCMD) install $(GOVULNCHECK_MODULE)@$(GOVULNCHECK_VERSION)
+	GOBIN=$(GOBIN) $(GOCMD) install $(GOLANGCI_LINT_MODULE)@$(GOLANGCI_LINT_VERSION)
+	GOBIN=$(GOBIN) $(GOCMD) install $(AIR_MODULE)@$(AIR_VERSION)
+	GOBIN=$(GOBIN) $(GOCMD) install $(GOVULNCHECK_MODULE)@$(GOVULNCHECK_VERSION)
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
