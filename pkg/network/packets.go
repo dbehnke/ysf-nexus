@@ -235,3 +235,89 @@ func simpleHash(s string) int {
 	}
 	return hash
 }
+
+// SanitizeCallsign removes common suffixes from callsigns to extract the base callsign
+// Examples:
+//   - "KF8S-DAVE" -> "KF8S"
+//   - "N8ZA/CHUCK" -> "N8ZA"
+//   - "M0FXB AND" -> "M0FXB"
+//   - "W1ABC" -> "W1ABC" (unchanged)
+func SanitizeCallsign(callsign string) string {
+	if callsign == "" {
+		return callsign
+	}
+
+	// Trim whitespace
+	callsign = strings.TrimSpace(callsign)
+
+	// Find the first occurrence of delimiter characters
+	for i, char := range callsign {
+		switch char {
+		case '-', '/', ' ':
+			// Return everything before the delimiter
+			return callsign[:i]
+		}
+	}
+
+	// No delimiter found, return as-is
+	return callsign
+}
+
+// SanitizeDataPacket sanitizes callsigns in a YSFD data packet
+// It modifies the packet in-place and returns the modified data
+func SanitizeDataPacket(data []byte) []byte {
+	if len(data) < DataPacketSize || string(data[:4]) != PacketTypeData {
+		return data // Not a data packet or too small
+	}
+
+	// Create a copy to avoid modifying the original
+	sanitized := make([]byte, len(data))
+	copy(sanitized, data)
+
+	// Sanitize gateway callsign (bytes 4-14)
+	if len(sanitized) >= 14 {
+		gatewayCS := strings.TrimSpace(string(sanitized[4:14]))
+		gatewayCS = strings.TrimRight(gatewayCS, "\x00")
+		if gatewayCS != "" {
+			cleaned := SanitizeCallsign(gatewayCS)
+			// Pad to 10 bytes with spaces
+			padded := fmt.Sprintf("%-10s", cleaned)
+			if len(padded) > 10 {
+				padded = padded[:10]
+			}
+			copy(sanitized[4:14], padded)
+		}
+	}
+
+	// Sanitize source callsign (bytes 14-24)
+	if len(sanitized) >= 24 {
+		sourceCS := strings.TrimSpace(string(sanitized[14:24]))
+		sourceCS = strings.TrimRight(sourceCS, "\x00")
+		if sourceCS != "" && sourceCS != "          " {
+			cleaned := SanitizeCallsign(sourceCS)
+			// Pad to 10 bytes with spaces
+			padded := fmt.Sprintf("%-10s", cleaned)
+			if len(padded) > 10 {
+				padded = padded[:10]
+			}
+			copy(sanitized[14:24], padded)
+		}
+	}
+
+	// Sanitize destination callsign (bytes 24-34)
+	if len(sanitized) >= 34 {
+		destCS := strings.TrimSpace(string(sanitized[24:34]))
+		destCS = strings.TrimRight(destCS, "\x00")
+		if destCS != "" && destCS != "          " {
+			cleaned := SanitizeCallsign(destCS)
+			// Pad to 10 bytes with spaces
+			padded := fmt.Sprintf("%-10s", cleaned)
+			if len(padded) > 10 {
+				padded = padded[:10]
+			}
+			copy(sanitized[24:34], padded)
+		}
+	}
+
+	return sanitized
+}

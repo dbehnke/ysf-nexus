@@ -38,6 +38,7 @@ func TestBridgeManager_PermanentBridge(t *testing.T) {
 			Name:       "test-permanent",
 			Host:       "localhost",
 			Port:       4200,
+			Enabled:    true,
 			Permanent:  true,
 			MaxRetries: 3,
 			RetryDelay: 1 * time.Second,
@@ -85,6 +86,7 @@ func TestBridgeManager_ScheduledBridge(t *testing.T) {
 			Name:     "test-scheduled",
 			Host:     "localhost",
 			Port:     4200,
+			Enabled:  true,
 			Schedule: "* * * * * *", // Every second
 			Duration: 2 * time.Second,
 		},
@@ -156,26 +158,131 @@ func TestBridge_ConnectionRetry(t *testing.T) {
 func TestBridge_Statistics(t *testing.T) {
 	logger := logger.NewTestLogger(os.Stdout)
 	mockServer := &MockNetworkServer{}
-	
+
 	config := config.BridgeConfig{
 		Name: "test-stats",
 		Host: "localhost",
 		Port: 4200,
 	}
-	
+
 	bridge := NewBridge(config, mockServer, logger)
-	
+
 	// Simulate receiving packets
 	bridge.IncrementRxStats(100)
 	bridge.IncrementRxStats(200)
-	
+
 	status := bridge.GetStatus()
-	
+
 	if status.PacketsRx != 2 {
 		t.Errorf("Expected 2 RX packets, got %d", status.PacketsRx)
 	}
-	
+
 	if status.BytesRx != 300 {
 		t.Errorf("Expected 300 RX bytes, got %d", status.BytesRx)
 	}
+}
+
+// TestBridge_ScheduledDisconnectDeadlock tests for the double-lock deadlock bug
+// where disconnect() holds b.mu and calls sendDisconnect() which tries to acquire b.mu again
+func TestBridge_ScheduledDisconnectDeadlock(t *testing.T) {
+	logger := logger.NewTestLogger(os.Stdout)
+	mockServer := &MockNetworkServer{}
+
+	config := config.BridgeConfig{
+		Name:     "test-deadlock",
+		Host:     "localhost",
+		Port:     4200,
+		Schedule: "",
+		Duration: 200 * time.Millisecond, // Short duration to trigger disconnect quickly
+	}
+
+	bridge := NewBridge(config, mockServer, logger)
+
+	// Create a context with a timeout
+	ctx := context.Background()
+
+	// Start the scheduled bridge in a goroutine
+	done := make(chan bool)
+	go func() {
+		bridge.RunScheduled(ctx, config.Duration)
+		done <- true
+	}()
+
+	// Wait for the bridge to complete or timeout
+	select {
+	case <-done:
+		// Success - bridge completed without deadlock
+		t.Log("Bridge completed successfully without deadlock")
+	case <-time.After(2 * time.Second):
+		// This indicates a deadlock - the bridge never completed
+		t.Fatal("Bridge disconnect deadlocked - timeout waiting for completion")
+	}
+
+	// Verify that disconnect packet was sent
+	if len(mockServer.sentPackets) == 0 {
+		t.Error("Expected disconnect packet to be sent")
+	}
+}
+
+// TestBridge_DisconnectPacket tests that YSFU packets are created correctly
+func TestBridge_DisconnectPacket(t *testing.T) {
+	logger := logger.NewTestLogger(os.Stdout)
+	mockServer := &MockNetworkServer{}
+
+	config := config.BridgeConfig{
+		Name: "TEST-BRDG",
+		Host: "localhost",
+		Port: 4200,
+	}
+
+	bridge := NewBridge(config, mockServer, logger)
+
+	// Test createDisconnectPacket directly
+	packet := bridge.createDisconnectPacket()
+
+	// Verify packet structure
+	if len(packet) != 14 {
+		t.Errorf("Expected packet length 14, got %d", len(packet))
+	}
+
+	// Check packet type (first 4 bytes should be "YSFU")
+	packetType := string(packet[0:4])
+	if packetType != "YSFU" {
+		t.Errorf("Expected packet type 'YSFU', got '%s'", packetType)
+	}
+
+	// Check callsign (bytes 4-14, should be "TEST-BRDG " - padded to 10 chars)
+	callsign := string(packet[4:14])
+	expected := "TEST-BRDG "
+	if callsign != expected {
+		t.Errorf("Expected callsign '%s', got '%s'", expected, callsign)
+	}
+
+	t.Logf("YSFU packet created correctly: type=%s, callsign='%s'", packetType, callsign)
+}
+
+// TestBridge_LongCallsignTruncation tests callsign truncation for disconnect packets
+func TestBridge_LongCallsignTruncation(t *testing.T) {
+	logger := logger.NewTestLogger(os.Stdout)
+	mockServer := &MockNetworkServer{}
+
+	config := config.BridgeConfig{
+		Name: "VERY-LONG-BRIDGE-NAME", // 20 chars, should be truncated to 10
+		Host: "localhost",
+		Port: 4200,
+	}
+
+	bridge := NewBridge(config, mockServer, logger)
+
+	// Test createDisconnectPacket with long name
+	packet := bridge.createDisconnectPacket()
+
+	// Check that callsign was truncated to 10 characters
+	callsign := string(packet[4:14])
+	expected := "VERY-LONG-" // First 10 chars
+	if callsign != expected {
+		t.Errorf("Expected truncated callsign '%s', got '%s'", expected, callsign)
+	}
+
+	t.Logf("Long callsign correctly truncated: '%s'", callsign)
 }
