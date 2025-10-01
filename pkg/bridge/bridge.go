@@ -473,6 +473,7 @@ func (b *Bridge) GetStatus() BridgeStatus {
 
 	return BridgeStatus{
 		Name:           b.config.Name,
+		Type:           "ysf",
 		State:          b.state,
 		ConnectedAt:    b.connectedAt,
 		DisconnectedAt: b.disconnectedAt,
@@ -489,6 +490,15 @@ func (b *Bridge) GetStatus() BridgeStatus {
 
 func (b *Bridge) GetName() string {
 	return b.config.Name
+}
+
+func (b *Bridge) GetType() string {
+	return "ysf"
+}
+
+func (b *Bridge) Disconnect() error {
+	b.disconnect()
+	return nil
 }
 
 func (b *Bridge) IsConnectedTo(addr *net.UDPAddr) bool {
