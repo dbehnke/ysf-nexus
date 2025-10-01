@@ -93,7 +93,7 @@ func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager
 		broadcast:  make(chan []byte, 256),
 		register:   make(chan *websocket.Conn),
 		unregister: make(chan *websocket.Conn),
-		}
+	}
 	// Assign logger to hub for internal logging
 	hub.logger = log.WithComponent("web.hub")
 
@@ -560,11 +560,13 @@ func (s *Server) handleRepeaters(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleBridges(w http.ResponseWriter, r *http.Request) {
 	bridges := make(map[string]interface{})
-	
+
 	// Check if bridge manager is available and has GetStatus method
 	if s.bridgeManager != nil {
 		// Use type assertion to check if it has GetStatus method with correct return type
-		if bm, ok := s.bridgeManager.(interface{ GetStatus() map[string]bridge.BridgeStatus }); ok {
+		if bm, ok := s.bridgeManager.(interface {
+			GetStatus() map[string]bridge.BridgeStatus
+		}); ok {
 			// Run GetStatus with a short timeout to avoid blocking the HTTP handler
 			type result struct {
 				status map[string]bridge.BridgeStatus
@@ -586,7 +588,7 @@ func (s *Server) handleBridges(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	
+
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"bridges": bridges,
 	}); err != nil {
@@ -615,7 +617,7 @@ func (s *Server) handleCurrentTalker(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	
+
 	// No regular repeater talking, check for bridge talkers
 	if s.reflector != nil {
 		if refl, ok := s.reflector.(interface{ GetCurrentBridgeTalker() interface{} }); ok {
@@ -642,7 +644,7 @@ func (s *Server) handleCurrentTalker(w http.ResponseWriter, r *http.Request) {
 						response := map[string]interface{}{
 							"current_talker": map[string]interface{}{
 								"callsign":      bt.GetCallsign(),
-								"address":       bt.GetBridgeName(), // Show bridge name as "address" 
+								"address":       bt.GetBridgeName(), // Show bridge name as "address"
 								"type":          "bridge",
 								"is_talking":    true,
 								"talk_duration": int(bt.GetTalkDuration().Seconds()),
@@ -660,7 +662,7 @@ func (s *Server) handleCurrentTalker(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	
+
 	// No one is talking
 	response := map[string]interface{}{
 		"current_talker": nil,

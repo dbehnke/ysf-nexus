@@ -11,17 +11,17 @@ import (
 
 // Manager manages multiple YSF repeaters
 type Manager struct {
-	repeaters    sync.Map
-	timeout      time.Duration
+	repeaters sync.Map
+	timeout   time.Duration
 	// activeKey holds the address string of the currently active (allowed) repeater
-	activeKey    string
-	activeMu     sync.Mutex
+	activeKey string
+	activeMu  sync.Mutex
 	// muted repeaters map address -> unmute until time (zero means muted until they stop)
-	muted        sync.Map // map[string]time.Time
+	muted sync.Map // map[string]time.Time
 	// maximum allowed continuous talk duration before muting
 	talkMaxDuration time.Duration
 	// duration after which a muted repeater will be automatically unmuted (0 = mute until stop)
-	unmuteAfter time.Duration
+	unmuteAfter  time.Duration
 	blocklist    *Blocklist
 	events       chan<- Event
 	maxRepeaters int
@@ -388,10 +388,10 @@ func (m *Manager) checkTalkTimeouts() {
 					m.muted.Delete(addrStr)
 				}
 			}
-				m.sendEvent(EventTalkEnd, repeater.Callsign(), addrStr, duration)
-				if m.logger != nil {
-					m.logger.Info("Repeater stopped talking (timeout)", logger.String("callsign", repeater.Callsign()), logger.Duration("duration", duration))
-				}
+			m.sendEvent(EventTalkEnd, repeater.Callsign(), addrStr, duration)
+			if m.logger != nil {
+				m.logger.Info("Repeater stopped talking (timeout)", logger.String("callsign", repeater.Callsign()), logger.Duration("duration", duration))
+			}
 		}
 		return true
 	})
@@ -489,10 +489,10 @@ func (m *Manager) sendEvent(eventType, callsign, address string, duration time.D
 
 	select {
 	case m.events <- event:
-		default:
-			// Don't block if event channel is full
-			if m.logger != nil {
-				m.logger.Warn("Event channel full, dropping event", logger.Any("event", event))
-			}
+	default:
+		// Don't block if event channel is full
+		if m.logger != nil {
+			m.logger.Warn("Event channel full, dropping event", logger.Any("event", event))
+		}
 	}
 }

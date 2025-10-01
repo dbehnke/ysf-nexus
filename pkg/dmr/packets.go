@@ -24,13 +24,13 @@ const (
 
 // Frame types for DMRD packets
 const (
-	FrameTypeVoiceHeader    = 0x01
-	FrameTypeVoiceSync      = 0x02
-	FrameTypeVoiceData      = 0x03
+	FrameTypeVoiceHeader     = 0x01
+	FrameTypeVoiceSync       = 0x02
+	FrameTypeVoiceData       = 0x03
 	FrameTypeVoiceTerminator = 0x04
-	FrameTypeDataHeader     = 0x05
-	FrameTypeDataSync       = 0x06
-	FrameTypeData           = 0x07
+	FrameTypeDataHeader      = 0x05
+	FrameTypeDataSync        = 0x06
+	FrameTypeData            = 0x07
 )
 
 // Call types
@@ -99,20 +99,20 @@ func (p *RPTKPacket) Serialize() []byte {
 
 // RPTCPacket represents a repeater configuration packet
 type RPTCPacket struct {
-	RepeaterID uint32
-	Callsign   string // Up to 8 characters
-	RXFreq     uint32 // In Hz
-	TXFreq     uint32 // In Hz
-	TXPower    uint32 // In watts
-	ColorCode  uint8
-	Latitude   float32
-	Longitude  float32
-	Height     int32
-	Location   string // Up to 20 characters
+	RepeaterID  uint32
+	Callsign    string // Up to 8 characters
+	RXFreq      uint32 // In Hz
+	TXFreq      uint32 // In Hz
+	TXPower     uint32 // In watts
+	ColorCode   uint8
+	Latitude    float32
+	Longitude   float32
+	Height      int32
+	Location    string // Up to 20 characters
 	Description string // Up to 20 characters
-	URL        string // Up to 124 characters
-	SoftwareID string // Up to 40 characters
-	PackageID  string // Up to 40 characters
+	URL         string // Up to 124 characters
+	SoftwareID  string // Up to 40 characters
+	PackageID   string // Up to 40 characters
 }
 
 // NewRPTCPacket creates a new configuration packet
@@ -226,17 +226,17 @@ func (p *MSTPPacket) Serialize() []byte {
 
 // DMRDPacket represents a DMR data packet (voice or data)
 type DMRDPacket struct {
-	Sequence    uint8
-	SrcID       uint32
-	DstID       uint32
-	RepeaterID  uint32
-	Slot        uint8  // 1 or 2
-	CallType    uint8  // Group or Private
-	FrameType   uint8  // Voice header, sync, data, terminator
-	StreamID    uint32
-	Data        []byte // 33 bytes of voice/data
-	BER         uint8  // Bit Error Rate
-	RSSI        uint8  // Signal strength
+	Sequence   uint8
+	SrcID      uint32
+	DstID      uint32
+	RepeaterID uint32
+	Slot       uint8 // 1 or 2
+	CallType   uint8 // Group or Private
+	FrameType  uint8 // Voice header, sync, data, terminator
+	StreamID   uint32
+	Data       []byte // 33 bytes of voice/data
+	BER        uint8  // Bit Error Rate
+	RSSI       uint8  // Signal strength
 }
 
 // NewDMRDPacket creates a new DMR data packet

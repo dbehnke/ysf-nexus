@@ -48,14 +48,14 @@ type WebConfig struct {
 // BridgeConfig holds bridge connection configuration
 type BridgeConfig struct {
 	Name        string        `mapstructure:"name"`
-	Type        string        `mapstructure:"type"`          // Bridge type: "ysf" or "dmr" (default: "ysf")
+	Type        string        `mapstructure:"type"` // Bridge type: "ysf" or "dmr" (default: "ysf")
 	Enabled     bool          `mapstructure:"enabled"`
-	Schedule    string        `mapstructure:"schedule"`      // Cron schedule (empty for permanent)
-	Duration    time.Duration `mapstructure:"duration"`      // Duration for scheduled bridges
-	Permanent   bool          `mapstructure:"permanent"`     // If true, ignore schedule and stay connected always
-	MaxRetries  int           `mapstructure:"max_retries"`   // Max reconnection attempts (0 = infinite)
-	RetryDelay  time.Duration `mapstructure:"retry_delay"`   // Initial retry delay for exponential backoff
-	HealthCheck time.Duration `mapstructure:"health_check"`  // How often to check connection health
+	Schedule    string        `mapstructure:"schedule"`     // Cron schedule (empty for permanent)
+	Duration    time.Duration `mapstructure:"duration"`     // Duration for scheduled bridges
+	Permanent   bool          `mapstructure:"permanent"`    // If true, ignore schedule and stay connected always
+	MaxRetries  int           `mapstructure:"max_retries"`  // Max reconnection attempts (0 = infinite)
+	RetryDelay  time.Duration `mapstructure:"retry_delay"`  // Initial retry delay for exponential backoff
+	HealthCheck time.Duration `mapstructure:"health_check"` // How often to check connection health
 
 	// YSF bridge fields (used when type="ysf")
 	Host string `mapstructure:"host"` // Remote YSF reflector host
@@ -132,7 +132,7 @@ type PrometheusConfig struct {
 
 // YSF2DMRConfig holds YSF2DMR bridge configuration
 type YSF2DMRConfig struct {
-	Enabled bool            `mapstructure:"enabled"`
+	Enabled bool             `mapstructure:"enabled"`
 	YSF     YSF2DMRYSFConfig `mapstructure:"ysf"`
 	DMR     YSF2DMRDMRConfig `mapstructure:"dmr"`
 	Lookup  DMRLookupConfig  `mapstructure:"lookup"`
@@ -232,6 +232,9 @@ func Load(configFile string) (*Config, error) {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
+	// Populate DMR passwords from environment variables if not set in file
+	populateDMRPasswordsFromEnv(&config)
+
 	return &config, nil
 }
 
@@ -278,7 +281,7 @@ func setDefaults() {
 	viper.SetDefault("metrics.prometheus.path", "/metrics")
 
 	// Bridge defaults
-	viper.SetDefault("bridges.type", "ysf")         // Default to YSF bridge type
+	viper.SetDefault("bridges.type", "ysf") // Default to YSF bridge type
 	viper.SetDefault("bridges.permanent", false)
 	viper.SetDefault("bridges.max_retries", 0)      // 0 = infinite retries
 	viper.SetDefault("bridges.retry_delay", "30s")  // Start with 30 second delay
@@ -306,4 +309,49 @@ func setDefaults() {
 	viper.SetDefault("ysf2dmr.audio.gain", 1.0)
 	viper.SetDefault("ysf2dmr.audio.vox_enabled", false)
 	viper.SetDefault("ysf2dmr.audio.vox_threshold", 0.1)
+}
+
+// populateDMRPasswordsFromEnv sets DMR passwords for bridges from environment variables
+// Env var pattern: BRIDGE_<BRIDGE_NAME>_DMR_PASSWORD (bridge name uppercased, non-alnum -> _)
+// Falls back to global YSF2DMR_DMR_PASSWORD for the ysf2dmr bridge if present.
+func populateDMRPasswordsFromEnv(cfg *Config) {
+	// Global fallback for ysf2dmr
+	if cfg.YSF2DMR.DMR.Password == "" {
+		if p := os.Getenv("YSF2DMR_DMR_PASSWORD"); p != "" {
+			cfg.YSF2DMR.DMR.Password = p
+		}
+	}
+
+	for i := range cfg.Bridges {
+		b := &cfg.Bridges[i]
+
+		// Only consider DMR bridges with nil/empty password
+		if b.DMR == nil {
+			continue
+		}
+
+		if b.DMR.Password != "" {
+			continue
+		}
+
+		// Build env var name
+		name := b.Name
+		// sanitize: replace non-alnum with underscore and uppercase
+		sanitized := make([]rune, 0, len(name))
+		for _, r := range name {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+				if r >= 'a' && r <= 'z' {
+					r = r - 'a' + 'A'
+				}
+				sanitized = append(sanitized, r)
+			} else {
+				sanitized = append(sanitized, '_')
+			}
+		}
+
+		envName := "BRIDGE_" + string(sanitized) + "_DMR_PASSWORD"
+		if p := os.Getenv(envName); p != "" {
+			b.DMR.Password = p
+		}
+	}
 }

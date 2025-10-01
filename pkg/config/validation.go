@@ -112,12 +112,34 @@ func validateBridge(config *BridgeConfig) error {
 		return fmt.Errorf("name cannot be empty")
 	}
 
-	if config.Host == "" {
-		return fmt.Errorf("host cannot be empty")
+	// Determine bridge type (default to ysf)
+	bridgeType := config.Type
+	if bridgeType == "" {
+		bridgeType = "ysf"
 	}
 
-	if config.Port < 1 || config.Port > 65535 {
-		return fmt.Errorf("invalid port: %d", config.Port)
+	// For YSF bridges, require top-level host/port. For DMR bridges, validate DMR block instead.
+	if bridgeType != "dmr" {
+		if config.Host == "" {
+			return fmt.Errorf("host cannot be empty")
+		}
+
+		if config.Port < 1 || config.Port > 65535 {
+			return fmt.Errorf("invalid port: %d", config.Port)
+		}
+	} else {
+		// DMR bridges must provide DMR-specific configuration
+		if config.DMR == nil {
+			return fmt.Errorf("dmr configuration is required for dmr bridge")
+		}
+
+		if config.DMR.Address == "" {
+			return fmt.Errorf("dmr.address cannot be empty")
+		}
+
+		if config.DMR.Port < 1 || config.DMR.Port > 65535 {
+			return fmt.Errorf("invalid dmr port: %d", config.DMR.Port)
+		}
 	}
 
 	// Permanent bridges don't need schedule/duration

@@ -44,7 +44,7 @@ bridges:
       network: "BrandMeister"
       address: "3100.r2.bm.dmrlog.net"
       port: 62031
-      password: "passw0rd"   # CHANGE THIS!
+  password: "passw0rd"   # CHANGE THIS! You can also set this via env var BRIDGE_BRANDMEISTERTG91_DMR_PASSWORD
       talk_group: 91         # Worldwide
       slot: 2
       color_code: 1
@@ -71,7 +71,7 @@ bridges:
       network: "BrandMeister"
       address: "3100.r2.bm.dmrlog.net"
       port: 62031
-      password: "passw0rd"
+  password: "passw0rd"   # Or set via BRIDGE_BRANDMEISTERTAC310_DMR_PASSWORD
       talk_group: 310        # TAC 310
       slot: 2
       color_code: 1
@@ -127,7 +127,7 @@ ysf2dmr:
     network: "BrandMeister"    # Network name (for display)
     address: "3100.r2.bm.dmrlog.net"  # DMR network server address
     port: 62031                # DMR network port
-    password: "passw0rd"       # Network password - CHANGE THIS!
+  password: "passw0rd"       # Network password - CHANGE THIS! You can also set global env var YSF2DMR_DMR_PASSWORD
     startup_tg: 91             # Default talk group (91 = Worldwide)
     slot: 2                    # DMR slot (1 or 2, usually 2)
     color_code: 1              # Color code (usually 1)
