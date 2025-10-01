@@ -521,6 +521,52 @@ func (b *Bridge) IsRunning() bool {
 	return b.running
 }
 
+// BridgeStatus represents the current status of the YSF2DMR bridge
+type BridgeStatus struct {
+	Enabled       bool        `json:"enabled"`
+	DMRConnected  bool        `json:"dmr_connected"`
+	YSFListening  bool        `json:"ysf_listening"`
+	ActiveCall    *CallState  `json:"active_call,omitempty"`
+	Stats         Statistics  `json:"stats"`
+	DMRNetwork    string      `json:"dmr_network,omitempty"`
+	DMRID         uint32      `json:"dmr_id,omitempty"`
+	TalkGroup     uint32      `json:"talk_group,omitempty"`
+	YSFCallsign   string      `json:"ysf_callsign,omitempty"`
+}
+
+// GetStatus returns the current bridge status for the web dashboard
+func (b *Bridge) GetStatus() BridgeStatus {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	status := BridgeStatus{
+		Enabled:      b.running,
+		DMRConnected: b.dmrNetwork != nil,
+		YSFListening: b.ysfServer != nil,
+		Stats:        b.stats,
+	}
+
+	// Add DMR network info if connected
+	if b.dmrNetwork != nil && b.config.DMR.Enabled {
+		status.DMRNetwork = b.config.DMR.Network
+		status.DMRID = b.config.DMR.ID
+		status.TalkGroup = b.config.DMR.StartupTG
+	}
+
+	// Add YSF info
+	if b.config.YSF.Callsign != "" {
+		status.YSFCallsign = b.config.YSF.Callsign
+	}
+
+	// Add active call if present
+	if b.activeCall != nil {
+		callCopy := *b.activeCall
+		status.ActiveCall = &callCopy
+	}
+
+	return status
+}
+
 // Helper functions
 
 // extractYSFCallsign extracts the callsign from a YSFD packet

@@ -182,6 +182,22 @@
                 <span v-if="!sidebarCollapsed">Talk Logs</span>
               </router-link>
             </li>
+            <li>
+              <router-link
+                to="/ysf2dmr"
+                :class="[
+                  'flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
+                  sidebarCollapsed ? 'justify-center' : '',
+                  $route.path === '/ysf2dmr' ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                ]"
+                :title="sidebarCollapsed ? 'YSF2DMR Bridge' : ''"
+              >
+                <svg :class="sidebarCollapsed ? '' : 'mr-3'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                <span v-if="!sidebarCollapsed">YSF2DMR</span>
+              </router-link>
+            </li>
             <li v-if="authStore.isAuthenticated">
               <router-link
                 to="/settings"

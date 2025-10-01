@@ -59,3 +59,57 @@ metrics:
     enabled: true
     port: 9090
     path: "/metrics"
+
+# YSF2DMR Bridge - Enables cross-mode YSF ↔ DMR voice bridging
+ysf2dmr:
+  enabled: false  # Set to true to enable YSF2DMR bridge
+
+  # YSF side configuration
+  ysf:
+    callsign: "YSF2DMR"
+    suffix: "ND"               # Optional suffix for WiresX
+    local_address: "0.0.0.0"   # Address to bind YSF listener
+    local_port: 42001          # Port for YSF repeaters to connect
+    enable_wiresx: false       # Enable WiresX protocol support
+    hang_time: "5s"            # Time to keep stream open after last packet
+
+  # DMR network configuration
+  dmr:
+    enabled: true
+    id: 1234567                # Your DMR ID (7-digit number)
+    network: "BrandMeister"    # Network name (for display)
+    address: "3100.r2.bm.dmrlog.net"  # DMR network server address
+    port: 62031                # DMR network port
+    password: "passw0rd"       # Network password - CHANGE THIS!
+    startup_tg: 91             # Default talk group (91 = Worldwide)
+    slot: 2                    # DMR slot (1 or 2, usually 2)
+    color_code: 1              # Color code (usually 1)
+    enable_private_call: false # Enable DMR private calls
+
+    # Optional repeater info for networks that require it
+    rx_freq: 435000000         # RX frequency in Hz (435.000 MHz)
+    tx_freq: 435000000         # TX frequency in Hz
+    tx_power: 1                # TX power (1=low, 2=medium, 3=high)
+    latitude: 42.5803          # Repeater latitude
+    longitude: -82.9469        # Repeater longitude
+    height: 50                 # Height above ground in meters
+    location: "Macomb, MI"     # Location description
+    description: "YSF2DMR Bridge"
+    url: "https://example.com"
+
+    ping_interval: "10s"       # Keep-alive ping interval
+    auth_timeout: "30s"        # Authentication timeout
+
+  # DMR ID lookup configuration
+  lookup:
+    enabled: true
+    dmr_id_file: "dmr_ids.csv"           # Path to DMR ID database file
+    auto_download: false                 # Auto-download database from RadioID.net
+    download_url: "https://radioid.net/static/users.csv"
+    refresh_interval: "24h"              # How often to refresh database
+
+  # Audio conversion settings
+  audio:
+    gain: 1.0                  # Audio gain multiplier (0.1 to 5.0)
+    vox_enabled: false         # Enable VOX (voice-activated transmission)
+    vox_threshold: 0.1         # VOX threshold (0.0 to 1.0)

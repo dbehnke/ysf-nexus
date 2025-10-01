@@ -12,6 +12,7 @@ import (
 	"github.com/dbehnke/ysf-nexus/pkg/network"
 	"github.com/dbehnke/ysf-nexus/pkg/repeater"
 	"github.com/dbehnke/ysf-nexus/pkg/web"
+	"github.com/dbehnke/ysf-nexus/pkg/ysf2dmr"
 )
 
 // bridgeTalker tracks bridge talker state
@@ -47,6 +48,7 @@ type Reflector struct {
 	server          *network.Server
 	repeaterManager *repeater.Manager
 	bridgeManager   *bridge.Manager
+	ysf2dmrBridge   *ysf2dmr.Bridge
 	webServer       *web.Server
 	eventChan       chan repeater.Event
 	running         bool
@@ -93,6 +95,17 @@ func NewWithVersion(cfg *config.Config, log *logger.Logger, version, buildTime s
 
 	// Initialize bridge manager
 	r.bridgeManager = bridge.NewManager(cfg.Bridges, r.server, r.logger)
+
+	// Initialize YSF2DMR bridge if enabled
+	if cfg.YSF2DMR.Enabled {
+		ysf2dmrBridge, err := ysf2dmr.NewBridge(cfg.YSF2DMR, r.logger)
+		if err != nil {
+			r.logger.Error("Failed to create YSF2DMR bridge", logger.Error(err))
+		} else {
+			r.ysf2dmrBridge = ysf2dmrBridge
+			r.logger.Info("YSF2DMR bridge initialized")
+		}
+	}
 
 	// Initialize web server
 	r.webServer = web.NewServer(cfg, log, r.repeaterManager, eventChan, r.bridgeManager, r, version, buildTime)
@@ -170,6 +183,17 @@ func (r *Reflector) Start(ctx context.Context) error {
 		r.cleanupBridgeTalkers(ctx)
 	}()
 
+	// Start YSF2DMR bridge if enabled
+	if r.ysf2dmrBridge != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := r.ysf2dmrBridge.Start(ctx); err != nil {
+				r.logger.Error("YSF2DMR bridge error", logger.Error(err))
+			}
+		}()
+	}
+
 	// Start network server (blocking)
 	serverErr := make(chan error, 1)
 	wg.Add(1)
@@ -205,6 +229,11 @@ func (r *Reflector) IsRunning() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.running
+}
+
+// GetYSF2DMRBridge returns the YSF2DMR bridge (may be nil if not enabled)
+func (r *Reflector) GetYSF2DMRBridge() *ysf2dmr.Bridge {
+	return r.ysf2dmrBridge
 }
 
 // GetStats returns current reflector statistics

@@ -208,6 +208,9 @@ func (s *Server) setupRoutes() *mux.Router {
 	// System endpoints
 	api.HandleFunc("/system/info", s.handleSystemInfo).Methods("GET")
 
+	// YSF2DMR endpoints
+	api.HandleFunc("/ysf2dmr/status", s.handleYSF2DMRStatus).Methods("GET")
+
 	// Authentication endpoints
 	api.HandleFunc("/auth/login", s.handleLogin).Methods("POST")
 	api.HandleFunc("/auth/logout", s.handleLogout).Methods("POST")
@@ -827,6 +830,54 @@ func (s *Server) handleGetLoggingConfig(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleUpdateLoggingConfig(w http.ResponseWriter, r *http.Request) {
 	// This would update the logging configuration
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "not implemented"}); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
+}
+
+// YSF2DMR handlers
+func (s *Server) handleYSF2DMRStatus(w http.ResponseWriter, r *http.Request) {
+	// Check if YSF2DMR bridge is available
+	if s.reflector == nil {
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"enabled": false,
+			"status":  nil,
+		}); err != nil {
+			s.logger.Error("failed to encode JSON response", logger.Error(err))
+		}
+		return
+	}
+
+	// Use type assertion to check if reflector has GetYSF2DMRBridge method
+	if refl, ok := s.reflector.(interface{ GetYSF2DMRBridge() interface{} }); ok {
+		bridge := refl.GetYSF2DMRBridge()
+		if bridge == nil {
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
+				"enabled": false,
+				"status":  nil,
+			}); err != nil {
+				s.logger.Error("failed to encode JSON response", logger.Error(err))
+			}
+			return
+		}
+
+		// Use type assertion to get status from bridge
+		if b, ok := bridge.(interface{ GetStatus() interface{} }); ok {
+			status := b.GetStatus()
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
+				"enabled": true,
+				"status":  status,
+			}); err != nil {
+				s.logger.Error("failed to encode JSON response", logger.Error(err))
+			}
+			return
+		}
+	}
+
+	// Fallback if type assertions fail
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
+		"enabled": false,
+		"status":  nil,
+	}); err != nil {
 		s.logger.Error("failed to encode JSON response", logger.Error(err))
 	}
 }
