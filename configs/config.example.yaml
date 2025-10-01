@@ -15,19 +15,66 @@ web:
   password: "changeme"  # Required if auth_required is true - CHANGE THIS!
 
 bridges:
+  # YSF Bridge to external YSF reflector
   - name: "YSF001"
+    type: ysf                # Bridge type: "ysf" or "dmr"
     host: "ysf001.example.com"
     port: 42000
     schedule: "0 */6 * * *"  # Every 6 hours
     duration: "1h"
     enabled: false
 
+  # YSF Bridge for weekly net
   - name: "Regional Net"
+    type: ysf
     host: "regional.ysf.net"
     port: 42000
     schedule: "0 20 * * 6"   # Saturdays at 8 PM
     duration: "1h30m"        # 1.5 hours
     enabled: false
+
+  # DMR Bridge to BrandMeister
+  - name: "BrandMeister TG91"
+    type: dmr
+    schedule: "0 20 * * 0"   # Sundays at 8 PM
+    duration: "2h"
+    enabled: false
+    dmr:
+      id: 1234567            # Your DMR ID (7-digit number)
+      network: "BrandMeister"
+      address: "3100.r2.bm.dmrlog.net"
+      port: 62031
+      password: "passw0rd"   # CHANGE THIS!
+      talk_group: 91         # Worldwide
+      slot: 2
+      color_code: 1
+      # Optional repeater info
+      rx_freq: 435000000
+      tx_freq: 435000000
+      tx_power: 1
+      latitude: 42.5803
+      longitude: -82.9469
+      height: 50
+      location: "Macomb, MI"
+      description: "YSF Nexus DMR Bridge"
+      url: "https://example.com"
+      ping_interval: "10s"
+      auth_timeout: "30s"
+
+  # Permanent DMR Bridge (always connected)
+  - name: "BrandMeister TAC310"
+    type: dmr
+    permanent: true          # Always stay connected
+    enabled: false
+    dmr:
+      id: 1234567
+      network: "BrandMeister"
+      address: "3100.r2.bm.dmrlog.net"
+      port: 62031
+      password: "passw0rd"
+      talk_group: 310        # TAC 310
+      slot: 2
+      color_code: 1
 
 mqtt:
   enabled: false

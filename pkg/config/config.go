@@ -48,15 +48,45 @@ type WebConfig struct {
 // BridgeConfig holds bridge connection configuration
 type BridgeConfig struct {
 	Name        string        `mapstructure:"name"`
-	Host        string        `mapstructure:"host"`
-	Port        int           `mapstructure:"port"`
-	Schedule    string        `mapstructure:"schedule"`
-	Duration    time.Duration `mapstructure:"duration"`
+	Type        string        `mapstructure:"type"`          // Bridge type: "ysf" or "dmr" (default: "ysf")
 	Enabled     bool          `mapstructure:"enabled"`
+	Schedule    string        `mapstructure:"schedule"`      // Cron schedule (empty for permanent)
+	Duration    time.Duration `mapstructure:"duration"`      // Duration for scheduled bridges
 	Permanent   bool          `mapstructure:"permanent"`     // If true, ignore schedule and stay connected always
 	MaxRetries  int           `mapstructure:"max_retries"`   // Max reconnection attempts (0 = infinite)
 	RetryDelay  time.Duration `mapstructure:"retry_delay"`   // Initial retry delay for exponential backoff
 	HealthCheck time.Duration `mapstructure:"health_check"`  // How often to check connection health
+
+	// YSF bridge fields (used when type="ysf")
+	Host string `mapstructure:"host"` // Remote YSF reflector host
+	Port int    `mapstructure:"port"` // Remote YSF reflector port
+
+	// DMR bridge fields (used when type="dmr")
+	DMR *DMRBridgeConfig `mapstructure:"dmr"` // DMR-specific configuration
+}
+
+// DMRBridgeConfig holds DMR-specific bridge configuration
+type DMRBridgeConfig struct {
+	ID                uint32        `mapstructure:"id"`                  // DMR ID
+	Network           string        `mapstructure:"network"`             // Network name (for display)
+	Address           string        `mapstructure:"address"`             // DMR network server address
+	Port              int           `mapstructure:"port"`                // DMR network port
+	Password          string        `mapstructure:"password"`            // Network password
+	TalkGroup         uint32        `mapstructure:"talk_group"`          // Talk group to bridge
+	Slot              uint8         `mapstructure:"slot"`                // DMR slot (1 or 2)
+	ColorCode         uint8         `mapstructure:"color_code"`          // Color code
+	EnablePrivateCall bool          `mapstructure:"enable_private_call"` // Enable private calls
+	RXFreq            uint32        `mapstructure:"rx_freq"`             // RX frequency in Hz
+	TXFreq            uint32        `mapstructure:"tx_freq"`             // TX frequency in Hz
+	TXPower           uint32        `mapstructure:"tx_power"`            // TX power level
+	Latitude          float32       `mapstructure:"latitude"`            // Latitude
+	Longitude         float32       `mapstructure:"longitude"`           // Longitude
+	Height            int32         `mapstructure:"height"`              // Height above ground
+	Location          string        `mapstructure:"location"`            // Location description
+	Description       string        `mapstructure:"description"`         // Description
+	URL               string        `mapstructure:"url"`                 // URL
+	PingInterval      time.Duration `mapstructure:"ping_interval"`       // Keep-alive interval
+	AuthTimeout       time.Duration `mapstructure:"auth_timeout"`        // Auth timeout
 }
 
 // MQTTConfig holds MQTT client configuration
@@ -248,6 +278,7 @@ func setDefaults() {
 	viper.SetDefault("metrics.prometheus.path", "/metrics")
 
 	// Bridge defaults
+	viper.SetDefault("bridges.type", "ysf")         // Default to YSF bridge type
 	viper.SetDefault("bridges.permanent", false)
 	viper.SetDefault("bridges.max_retries", 0)      // 0 = infinite retries
 	viper.SetDefault("bridges.retry_delay", "30s")  // Start with 30 second delay
