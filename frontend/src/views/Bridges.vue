@@ -74,9 +74,14 @@
               </td>
               <!-- Type -->
               <td class="table-cell">
-                <span :class="getTypeBadgeClass(bridge)" class="badge">
-                  {{ getTypeText(bridge) }}
-                </span>
+                <div class="flex flex-col space-y-1">
+                  <span :class="getBridgeTypeBadgeClass(bridge.type)" class="badge">
+                    {{ getBridgeTypeText(bridge.type) }}
+                  </span>
+                  <span :class="getScheduleTypeBadgeClass(bridge)" class="badge text-xs">
+                    {{ getScheduleTypeText(bridge) }}
+                  </span>
+                </div>
               </td>
               <!-- Connected Time -->
               <td class="table-cell">
@@ -191,21 +196,43 @@ const getStatusText = (state) => {
   }
 }
 
-const getTypeBadgeClass = (bridge) => {
-  // Determine if permanent based on whether it has schedule info
-  const isPermanent = !bridge.next_schedule
-  return isPermanent ? 'badge-success' : 'badge-info'
+const getBridgeTypeBadgeClass = (type) => {
+  switch (type) {
+    case 'ysf': return 'badge-primary'
+    case 'dmr': return 'badge-success'
+    default: return 'badge-secondary'
+  }
 }
 
-const getTypeText = (bridge) => {
+const getBridgeTypeText = (type) => {
+  switch (type) {
+    case 'ysf': return 'YSF'
+    case 'dmr': return 'DMR'
+    default: return 'Unknown'
+  }
+}
+
+const getScheduleTypeBadgeClass = (bridge) => {
+  const isPermanent = !bridge.next_schedule
+  return isPermanent ? 'badge-warning' : 'badge-info'
+}
+
+const getScheduleTypeText = (bridge) => {
   const isPermanent = !bridge.next_schedule
   return isPermanent ? 'Permanent' : 'Scheduled'
 }
 
 const getRemoteHost = (bridge) => {
-  // Extract host from bridge config (this would need to be provided by the API)
-  // For now, show placeholder - the API should include host:port info
-  return 'Remote Host'
+  // For DMR bridges, show network and talk group
+  if (bridge.type === 'dmr' && bridge.metadata) {
+    const network = bridge.metadata.dmr_network || 'DMR'
+    const tg = bridge.metadata.talk_group || '?'
+    return `${network} TG${tg}`
+  }
+
+  // For YSF bridges, would show host:port if available in API
+  // For now, just return a placeholder
+  return 'YSF Reflector'
 }
 
 const formatDateTime = (dateString) => {
