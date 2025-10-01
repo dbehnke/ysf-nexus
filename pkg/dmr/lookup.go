@@ -32,8 +32,8 @@ type Lookup struct {
 	mu sync.RWMutex
 
 	// Bidirectional maps
-	dmrToEntry   map[uint32]*LookupEntry
-	callToDMR    map[string]uint32
+	dmrToEntry map[uint32]*LookupEntry
+	callToDMR  map[string]uint32
 
 	// Configuration
 	filePath     string
@@ -47,9 +47,9 @@ type Lookup struct {
 
 // LookupConfig holds lookup configuration
 type LookupConfig struct {
-	FilePath     string        // Path to local DMR ID file
-	DownloadURL  string        // URL to download database from
-	AutoDownload bool          // Auto-download if file doesn't exist
+	FilePath        string        // Path to local DMR ID file
+	DownloadURL     string        // URL to download database from
+	AutoDownload    bool          // Auto-download if file doesn't exist
 	RefreshInterval time.Duration // How often to refresh (0 = manual only)
 }
 
@@ -103,7 +103,11 @@ func (l *Lookup) LoadFromFile(filepath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			l.logger.Warn("Failed to close file", logger.Error(err))
+		}
+	}()
 
 	// Detect format by extension or content
 	isCSV := strings.HasSuffix(filepath, ".csv")
@@ -334,7 +338,11 @@ func (l *Lookup) Download(url, savePath string) error {
 	if err != nil {
 		return fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			l.logger.Warn("Failed to close response body", logger.Error(err))
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP status %d: %s", resp.StatusCode, resp.Status)
@@ -345,7 +353,11 @@ func (l *Lookup) Download(url, savePath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer out.Close()
+	defer func() {
+		if err := out.Close(); err != nil {
+			l.logger.Warn("Failed to close output file", logger.Error(err))
+		}
+	}()
 
 	// Copy data
 	written, err := io.Copy(out, resp.Body)

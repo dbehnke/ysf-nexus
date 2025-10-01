@@ -76,7 +76,9 @@ func TestNewLookupWithDAT(t *testing.T) {
 func TestGetCallsign(t *testing.T) {
 	tmpDir := t.TempDir()
 	csvFile := filepath.Join(tmpDir, "test.csv")
-	os.WriteFile(csvFile, []byte(sampleCSV), 0644)
+	if err := os.WriteFile(csvFile, []byte(sampleCSV), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
 
 	log, _ := logger.New(logger.Config{Level: "error", Format: "text"})
 	config := LookupConfig{FilePath: csvFile}
@@ -107,7 +109,9 @@ func TestGetCallsign(t *testing.T) {
 func TestGetDMRID(t *testing.T) {
 	tmpDir := t.TempDir()
 	csvFile := filepath.Join(tmpDir, "test.csv")
-	os.WriteFile(csvFile, []byte(sampleCSV), 0644)
+	if err := os.WriteFile(csvFile, []byte(sampleCSV), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
 
 	log, _ := logger.New(logger.Config{Level: "error", Format: "text"})
 	config := LookupConfig{FilePath: csvFile}
@@ -118,9 +122,9 @@ func TestGetDMRID(t *testing.T) {
 	}
 
 	tests := []struct {
-		callsign     string
-		expectedID   uint32
-		expectedOK   bool
+		callsign   string
+		expectedID uint32
+		expectedOK bool
 	}{
 		{"W1ABC", 1234567, true},
 		{"w1abc", 1234567, true}, // Case insensitive
@@ -143,7 +147,9 @@ func TestGetDMRID(t *testing.T) {
 func TestGetEntry(t *testing.T) {
 	tmpDir := t.TempDir()
 	csvFile := filepath.Join(tmpDir, "test.csv")
-	os.WriteFile(csvFile, []byte(sampleCSV), 0644)
+	if err := os.WriteFile(csvFile, []byte(sampleCSV), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
 
 	log, _ := logger.New(logger.Config{Level: "error", Format: "text"})
 	config := LookupConfig{FilePath: csvFile}
@@ -189,7 +195,9 @@ DMRID,Callsign,Name,City,State,Country
 
 	tmpDir := t.TempDir()
 	csvFile := filepath.Join(tmpDir, "test.csv")
-	os.WriteFile(csvFile, []byte(csvWithHeader), 0644)
+	if err := os.WriteFile(csvFile, []byte(csvWithHeader), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
 
 	log, _ := logger.New(logger.Config{Level: "error", Format: "text"})
 	config := LookupConfig{FilePath: csvFile}
@@ -213,7 +221,9 @@ INVALID,W1ABC,John Doe
 
 	tmpDir := t.TempDir()
 	csvFile := filepath.Join(tmpDir, "test.csv")
-	os.WriteFile(csvFile, []byte(invalidCSV), 0644)
+	if err := os.WriteFile(csvFile, []byte(invalidCSV), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
 
 	log, _ := logger.New(logger.Config{Level: "error", Format: "text"})
 	config := LookupConfig{FilePath: csvFile}
@@ -239,7 +249,9 @@ func TestRefresh(t *testing.T) {
 	csvFile := filepath.Join(tmpDir, "test.csv")
 
 	// Write initial data
-	os.WriteFile(csvFile, []byte(sampleCSV), 0644)
+	if err := os.WriteFile(csvFile, []byte(sampleCSV), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
 
 	log, _ := logger.New(logger.Config{Level: "error", Format: "text"})
 	config := LookupConfig{FilePath: csvFile}
@@ -260,7 +272,9 @@ func TestRefresh(t *testing.T) {
 3456789,N3QRS,Bob Johnson,Philadelphia,PA,United States
 4567890,W4DEF,Alice Brown,Atlanta,GA,United States
 `
-	os.WriteFile(csvFile, []byte(newCSV), 0644)
+	if err := os.WriteFile(csvFile, []byte(newCSV), 0644); err != nil {
+		t.Fatalf("Failed to write updated test file: %v", err)
+	}
 
 	// Refresh
 	if err := lookup.Refresh(); err != nil {
@@ -280,7 +294,9 @@ func TestRefresh(t *testing.T) {
 func TestLastRefresh(t *testing.T) {
 	tmpDir := t.TempDir()
 	csvFile := filepath.Join(tmpDir, "test.csv")
-	os.WriteFile(csvFile, []byte(sampleCSV), 0644)
+	if err := os.WriteFile(csvFile, []byte(sampleCSV), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
 
 	log, _ := logger.New(logger.Config{Level: "error", Format: "text"})
 	config := LookupConfig{FilePath: csvFile}
@@ -301,7 +317,9 @@ func TestLastRefresh(t *testing.T) {
 func TestCount(t *testing.T) {
 	tmpDir := t.TempDir()
 	csvFile := filepath.Join(tmpDir, "test.csv")
-	os.WriteFile(csvFile, []byte(sampleCSV), 0644)
+	if err := os.WriteFile(csvFile, []byte(sampleCSV), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
 
 	log, _ := logger.New(logger.Config{Level: "error", Format: "text"})
 	config := LookupConfig{FilePath: csvFile}
@@ -319,7 +337,9 @@ func TestCount(t *testing.T) {
 func TestEmptyDatabase(t *testing.T) {
 	tmpDir := t.TempDir()
 	csvFile := filepath.Join(tmpDir, "empty.csv")
-	os.WriteFile(csvFile, []byte("DMRID,Callsign,Name\n"), 0644)
+	if err := os.WriteFile(csvFile, []byte("DMRID,Callsign,Name\n"), 0644); err != nil {
+		t.Fatalf("Failed to create empty test file: %v", err)
+	}
 
 	log, _ := logger.New(logger.Config{Level: "error", Format: "text"})
 	config := LookupConfig{FilePath: csvFile}
@@ -346,7 +366,9 @@ func TestEmptyDatabase(t *testing.T) {
 func TestConcurrentAccess(t *testing.T) {
 	tmpDir := t.TempDir()
 	csvFile := filepath.Join(tmpDir, "test.csv")
-	os.WriteFile(csvFile, []byte(sampleCSV), 0644)
+	if err := os.WriteFile(csvFile, []byte(sampleCSV), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
 
 	log, _ := logger.New(logger.Config{Level: "error", Format: "text"})
 	config := LookupConfig{FilePath: csvFile}
@@ -378,7 +400,9 @@ func TestConcurrentAccess(t *testing.T) {
 func BenchmarkGetCallsign(b *testing.B) {
 	tmpDir := b.TempDir()
 	csvFile := filepath.Join(tmpDir, "test.csv")
-	os.WriteFile(csvFile, []byte(sampleCSV), 0644)
+	if err := os.WriteFile(csvFile, []byte(sampleCSV), 0644); err != nil {
+		b.Fatalf("Failed to create benchmark test file: %v", err)
+	}
 
 	log, _ := logger.New(logger.Config{Level: "error", Format: "text"})
 	config := LookupConfig{FilePath: csvFile}
@@ -394,7 +418,9 @@ func BenchmarkGetCallsign(b *testing.B) {
 func BenchmarkGetDMRID(b *testing.B) {
 	tmpDir := b.TempDir()
 	csvFile := filepath.Join(tmpDir, "test.csv")
-	os.WriteFile(csvFile, []byte(sampleCSV), 0644)
+	if err := os.WriteFile(csvFile, []byte(sampleCSV), 0644); err != nil {
+		b.Fatalf("Failed to create test file: %v", err)
+	}
 
 	log, _ := logger.New(logger.Config{Level: "error", Format: "text"})
 	config := LookupConfig{FilePath: csvFile}

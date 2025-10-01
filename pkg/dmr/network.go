@@ -43,25 +43,25 @@ func (s NetworkState) String() string {
 
 // Config holds DMR network configuration
 type Config struct {
-	Address     string        // DMR network server address
-	Port        int           // DMR network server port
-	RepeaterID  uint32        // Our DMR ID/Repeater ID
-	Password    string        // Network password
-	Callsign    string        // Station callsign
-	RXFreq      uint32        // RX frequency in Hz
-	TXFreq      uint32        // TX frequency in Hz
-	TXPower     uint32        // TX power in watts
-	ColorCode   uint8         // DMR color code
-	Latitude    float32       // Station latitude
-	Longitude   float32       // Station longitude
-	Height      int32         // Antenna height in meters
-	Location    string        // Station location text
-	Description string        // Station description
-	URL         string        // Station URL
-	SoftwareID  string        // Software identification
-	PackageID   string        // Package identification
-	Slot        uint8         // Default slot (1 or 2)
-	TalkGroup   uint32        // Default talkgroup
+	Address     string  // DMR network server address
+	Port        int     // DMR network server port
+	RepeaterID  uint32  // Our DMR ID/Repeater ID
+	Password    string  // Network password
+	Callsign    string  // Station callsign
+	RXFreq      uint32  // RX frequency in Hz
+	TXFreq      uint32  // TX frequency in Hz
+	TXPower     uint32  // TX power in watts
+	ColorCode   uint8   // DMR color code
+	Latitude    float32 // Station latitude
+	Longitude   float32 // Station longitude
+	Height      int32   // Antenna height in meters
+	Location    string  // Station location text
+	Description string  // Station description
+	URL         string  // Station URL
+	SoftwareID  string  // Software identification
+	PackageID   string  // Package identification
+	Slot        uint8   // Default slot (1 or 2)
+	TalkGroup   uint32  // Default talkgroup
 
 	// Network options
 	PingInterval time.Duration // How often to respond to pings
@@ -187,7 +187,9 @@ func (n *Network) Stop() error {
 	close(n.stopChan)
 
 	if n.conn != nil {
-		n.conn.Close()
+		if err := n.conn.Close(); err != nil {
+			n.logger.Warn("Error closing UDP connection", logger.Error(err))
+		}
 	}
 
 	n.setState(StateDisconnected)
@@ -220,7 +222,8 @@ func (n *Network) authenticate(ctx context.Context) error {
 		case <-authTimeout.C:
 			return fmt.Errorf("authentication timeout")
 		case packet := <-n.rxChan:
-			if packet.Type == PacketTypeRPTA {
+			switch packet.Type {
+			case PacketTypeRPTA:
 				_, receivedSalt, err := ParseRPTAPacket(packet.Data)
 				if err != nil {
 					return fmt.Errorf("failed to parse RPTA: %w", err)
@@ -229,6 +232,8 @@ func (n *Network) authenticate(ctx context.Context) error {
 				n.salt = salt
 				n.logger.Info("Received RPTA with salt", logger.Int("salt_len", len(salt)))
 				goto saltReceived
+			default:
+				// ignore other packet types
 			}
 		}
 	}
@@ -252,11 +257,14 @@ saltReceived:
 		case <-authTimeout.C:
 			return fmt.Errorf("authentication timeout waiting for RPTK ACK")
 		case packet := <-n.rxChan:
-			if packet.Type == PacketTypeRPTA {
+			switch packet.Type {
+			case PacketTypeRPTA:
 				n.logger.Info("Received RPTK acknowledgment")
 				goto authenticated
-			} else if packet.Type == PacketTypeMSTN {
+			case PacketTypeMSTN:
 				return fmt.Errorf("authentication rejected by server (MSTN)")
+			default:
+				// ignore other packet types
 			}
 		}
 	}
@@ -294,13 +302,16 @@ authenticated:
 		case <-authTimeout.C:
 			return fmt.Errorf("authentication timeout waiting for RPTC ACK")
 		case packet := <-n.rxChan:
-			if packet.Type == PacketTypeRPTA {
+			switch packet.Type {
+			case PacketTypeRPTA:
 				n.logger.Info("DMR network authentication successful")
 				n.authenticated = true
 				n.setState(StateAuthenticated)
 				return nil
-			} else if packet.Type == PacketTypeMSTN {
+			case PacketTypeMSTN:
 				return fmt.Errorf("configuration rejected by server (MSTN)")
+			default:
+				// ignore other packet types
 			}
 		}
 	}
@@ -318,7 +329,10 @@ func (n *Network) receiveLoop(ctx context.Context) {
 			return
 		default:
 			// Set read deadline to allow checking context
-			n.conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+			if err := n.conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+				// If we can't set a deadline, log and continue - receiver may still work
+				n.logger.Debug("Failed to set read deadline", logger.Error(err))
+			}
 
 			length, addr, err := n.conn.ReadFromUDP(buffer)
 			if err != nil {

@@ -1,0 +1,82 @@
+server:
+  host: "0.0.0.0"
+  port: 42000
+  timeout: "5m"
+  max_connections: 200
+  name: "YSF Nexus Test"
+  description: "Test reflector"
+
+web:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  auth_required: false
+
+# Mixed bridge configuration for testing
+bridges:
+  # YSF Bridge (scheduled)
+  - name: "Test-YSF-Scheduled"
+    type: ysf
+    host: "localhost"
+    port: 42001
+    schedule: "0 */1 * * *"  # Every hour for testing
+    duration: "10m"
+    enabled: false  # Disabled by default for tests
+
+  # YSF Bridge (permanent)
+  - name: "Test-YSF-Permanent"
+    type: ysf
+    host: "localhost"
+    port: 42002
+    permanent: true
+    enabled: false  # Disabled by default for tests
+
+  # DMR Bridge (scheduled)
+  - name: "Test-DMR-Scheduled"
+    type: dmr
+    schedule: "0 */2 * * *"  # Every 2 hours for testing
+    duration: "15m"
+    enabled: false  # Disabled by default for tests
+    dmr:
+      id: 1234567
+      network: "Test-BrandMeister"
+      address: "localhost"
+      port: 62031
+      password: "test123"
+      talk_group: 91
+      slot: 2
+      color_code: 1
+      ping_interval: "10s"
+      auth_timeout: "30s"
+
+  # DMR Bridge (permanent)
+  - name: "Test-DMR-Permanent"
+    type: dmr
+    permanent: true
+    enabled: false  # Disabled by default for tests
+    dmr:
+      id: 7654321
+      network: "Test-TGIF"
+      address: "localhost"
+      port: 62032
+      password: "test456"
+      talk_group: 310
+      slot: 2
+      color_code: 1
+      ping_interval: "10s"
+      auth_timeout: "30s"
+
+mqtt:
+  enabled: false
+
+blocklist:
+  enabled: true
+  callsigns: []
+
+logging:
+  level: "debug"
+  format: "text"
+  file: ""
+
+metrics:
+  enabled: false

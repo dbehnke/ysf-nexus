@@ -160,7 +160,10 @@ func ExtractYSFVoice(ysfPacket []byte) (*YSFVoicePayload, error) {
 			}
 
 			if offset+7 <= len(ysfPacket) {
-				frame.FromBytes(ysfPacket[offset : offset+7])
+				if err := frame.FromBytes(ysfPacket[offset : offset+7]); err != nil {
+					// Skip invalid frames
+					continue
+				}
 			}
 		}
 	}

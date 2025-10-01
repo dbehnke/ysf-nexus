@@ -79,7 +79,7 @@ const (
 // BridgeStatus holds runtime status information for a bridge
 type BridgeStatus struct {
 	Name           string                 `json:"name"`
-	Type           string                 `json:"type"`           // Bridge type: "ysf" or "dmr"
+	Type           string                 `json:"type"` // Bridge type: "ysf" or "dmr"
 	State          BridgeState            `json:"state"`
 	ConnectedAt    *time.Time             `json:"connected_at,omitempty"`
 	DisconnectedAt *time.Time             `json:"disconnected_at,omitempty"`
@@ -228,8 +228,7 @@ func (m *Manager) setupBridge(config config.BridgeConfig) error {
 
 // setupScheduleTracking initializes schedule tracking for missed recovery
 func (m *Manager) setupScheduleTracking(config config.BridgeConfig) {
-	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
-	schedule, err := parser.Parse(config.Schedule)
+	schedule, err := parseSchedule(config.Schedule)
 	if err != nil {
 		m.logger.Error("Failed to parse schedule for tracking",
 			logger.String("name", config.Name),
@@ -255,17 +254,11 @@ func (m *Manager) setupScheduleTracking(config config.BridgeConfig) {
 	m.mu.Unlock()
 }
 
-// shouldStartNow determines if a scheduled bridge should start now due to missed schedule
-// Deprecated: Use shouldStartNowWithDuration instead
-func (m *Manager) shouldStartNow(config config.BridgeConfig) bool {
-	shouldStart, _ := m.shouldStartNowWithDuration(config)
-	return shouldStart
-}
+// (deprecated wrapper removed)
 
 // shouldStartNowWithDuration determines if a scheduled bridge should start now and returns remaining duration
 func (m *Manager) shouldStartNowWithDuration(config config.BridgeConfig) (bool, time.Duration) {
-	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
-	schedule, err := parser.Parse(config.Schedule)
+	schedule, err := parseSchedule(config.Schedule)
 	if err != nil {
 		return false, 0
 	}
@@ -363,6 +356,21 @@ func (m *Manager) updateScheduleExecution(name string) {
 	}
 }
 
+// parseSchedule tries parsing a cron expression that may include seconds (6 fields)
+// or just standard minute-based expressions (5 fields). It tries the parser with
+// seconds first, and falls back to the 5-field parser.
+func parseSchedule(expr string) (cron.Schedule, error) {
+	// Try with seconds
+	secParser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	if sched, err := secParser.Parse(expr); err == nil {
+		return sched, nil
+	}
+
+	// Fall back to minute-based (no seconds)
+	minParser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	return minParser.Parse(expr)
+}
+
 // checkMissedSchedules checks for schedules that should be running but aren't
 func (m *Manager) checkMissedSchedules() {
 	m.mu.RLock()
@@ -389,12 +397,7 @@ func (m *Manager) checkMissedSchedules() {
 	}
 }
 
-// shouldRecoverSchedule determines if a schedule should be recovered
-// Deprecated: Use shouldRecoverScheduleWithDuration instead
-func (m *Manager) shouldRecoverSchedule(schedInfo *ScheduleInfo) bool {
-	shouldRecover, _ := m.shouldRecoverScheduleWithDuration(schedInfo)
-	return shouldRecover
-}
+// (deprecated wrapper removed)
 
 // shouldRecoverScheduleWithDuration determines if a schedule should be recovered and returns remaining duration
 func (m *Manager) shouldRecoverScheduleWithDuration(schedInfo *ScheduleInfo) (bool, time.Duration) {

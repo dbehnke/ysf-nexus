@@ -213,7 +213,10 @@ func (a *DMRBridgeAdapter) disconnect() {
 
 	// Stop the ysf2dmr bridge
 	if a.bridge != nil {
-		a.bridge.Stop()
+		if err := a.bridge.Stop(); err != nil {
+			// Log stop error but continue disconnect
+			a.logger.Warn("Error stopping ysf2dmr bridge", logger.Error(err))
+		}
 	}
 
 	now := time.Now()
@@ -245,13 +248,13 @@ func (a *DMRBridgeAdapter) GetStatus() BridgeStatus {
 		LastError:      a.lastError,
 	}
 
-	// Get stats from ysf2dmr bridge
-	if a.bridge != nil && a.bridge.IsRunning() {
+	// Get stats from ysf2dmr bridge if available
+	if a.bridge != nil {
 		stats := a.bridge.GetStatistics()
 		status.PacketsRx = stats.YSFPackets + stats.DMRPackets
-		status.PacketsTx = stats.YSFPackets + stats.DMRPackets  // Combined count
-		status.BytesRx = 0  // Not tracked separately
-		status.BytesTx = 0  // Not tracked separately
+		status.PacketsTx = stats.YSFPackets + stats.DMRPackets // Combined count
+		status.BytesRx = 0                                     // Not tracked separately
+		status.BytesTx = 0                                     // Not tracked separately
 
 		// Add DMR-specific metadata
 		status.Metadata = map[string]interface{}{

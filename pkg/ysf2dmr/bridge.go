@@ -3,7 +3,6 @@ package ysf2dmr
 import (
 	"context"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
@@ -36,16 +35,16 @@ func (d CallDirection) String() string {
 
 // CallState tracks an active cross-mode call
 type CallState struct {
-	Direction     CallDirection
-	YSFCallsign   string
-	DMRID         uint32
-	DMRCallsign   string
-	TalkGroup     uint32
-	Slot          uint8
-	StartTime     time.Time
-	LastActivity  time.Time
-	FrameCount    uint32
-	StreamID      uint32
+	Direction    CallDirection
+	YSFCallsign  string
+	DMRID        uint32
+	DMRCallsign  string
+	TalkGroup    uint32
+	Slot         uint8
+	StartTime    time.Time
+	LastActivity time.Time
+	FrameCount   uint32
+	StreamID     uint32
 }
 
 // Bridge coordinates YSF ↔ DMR cross-mode communication
@@ -60,9 +59,9 @@ type Bridge struct {
 	converter  *codec.Converter
 
 	// State management
-	mu          sync.RWMutex
-	activeCall  *CallState
-	running     bool
+	mu         sync.RWMutex
+	activeCall *CallState
+	running    bool
 
 	// Statistics
 	stats Statistics
@@ -134,23 +133,23 @@ func (b *Bridge) Start(ctx context.Context) error {
 	// Initialize DMR network connection
 	if b.config.DMR.Enabled {
 		dmrConfig := dmr.Config{
-			Address:    b.config.DMR.Address,
-			Port:       b.config.DMR.Port,
-			RepeaterID: b.config.DMR.ID,
-			Password:   b.config.DMR.Password,
-			Callsign:   b.config.YSF.Callsign,
-			RXFreq:     b.config.DMR.RXFreq,
-			TXFreq:     b.config.DMR.TXFreq,
-			TXPower:    b.config.DMR.TXPower,
-			ColorCode:  b.config.DMR.ColorCode,
-			Latitude:   b.config.DMR.Latitude,
-			Longitude:  b.config.DMR.Longitude,
-			Height:     b.config.DMR.Height,
-			Location:   b.config.DMR.Location,
-			Description: b.config.DMR.Description,
-			URL:        b.config.DMR.URL,
-			Slot:       b.config.DMR.Slot,
-			TalkGroup:  b.config.DMR.StartupTG,
+			Address:      b.config.DMR.Address,
+			Port:         b.config.DMR.Port,
+			RepeaterID:   b.config.DMR.ID,
+			Password:     b.config.DMR.Password,
+			Callsign:     b.config.YSF.Callsign,
+			RXFreq:       b.config.DMR.RXFreq,
+			TXFreq:       b.config.DMR.TXFreq,
+			TXPower:      b.config.DMR.TXPower,
+			ColorCode:    b.config.DMR.ColorCode,
+			Latitude:     b.config.DMR.Latitude,
+			Longitude:    b.config.DMR.Longitude,
+			Height:       b.config.DMR.Height,
+			Location:     b.config.DMR.Location,
+			Description:  b.config.DMR.Description,
+			URL:          b.config.DMR.URL,
+			Slot:         b.config.DMR.Slot,
+			TalkGroup:    b.config.DMR.StartupTG,
 			PingInterval: b.config.DMR.PingInterval,
 			AuthTimeout:  b.config.DMR.AuthTimeout,
 		}
@@ -474,14 +473,16 @@ func (b *Bridge) endCallLocked() {
 
 	// Send terminator based on direction
 	if b.activeCall.Direction == DirectionYSFToDMR && b.dmrNetwork != nil {
-		b.dmrNetwork.SendVoiceTerminator(
+		if err := b.dmrNetwork.SendVoiceTerminator(
 			b.activeCall.DMRID,
 			b.activeCall.TalkGroup,
 			b.activeCall.Slot,
 			dmr.CallTypeGroup,
 			b.activeCall.StreamID,
 			uint8(b.activeCall.FrameCount%256),
-		)
+		); err != nil {
+			b.logger.Warn("Failed to send voice terminator", logger.Error(err))
+		}
 	}
 
 	b.stats.mu.Lock()
@@ -492,12 +493,25 @@ func (b *Bridge) endCallLocked() {
 	b.converter.Reset()
 }
 
-// GetStatistics returns bridge statistics
-func (b *Bridge) GetStatistics() Statistics {
+// snapshotStats returns a copy of statistics without copying the internal mutex
+func (b *Bridge) snapshotStats() Statistics {
 	b.stats.mu.RLock()
 	defer b.stats.mu.RUnlock()
 
-	return b.stats
+	return Statistics{
+		TotalCalls:    b.stats.TotalCalls,
+		YSFToDMRCalls: b.stats.YSFToDMRCalls,
+		DMRToYSFCalls: b.stats.DMRToYSFCalls,
+		YSFPackets:    b.stats.YSFPackets,
+		DMRPackets:    b.stats.DMRPackets,
+		FramesDropped: b.stats.FramesDropped,
+		LastCallTime:  b.stats.LastCallTime,
+	}
+}
+
+// GetStatistics returns bridge statistics
+func (b *Bridge) GetStatistics() Statistics {
+	return b.snapshotStats()
 }
 
 // GetActiveCall returns the current active call state
@@ -523,15 +537,15 @@ func (b *Bridge) IsRunning() bool {
 
 // BridgeStatus represents the current status of the YSF2DMR bridge
 type BridgeStatus struct {
-	Enabled       bool        `json:"enabled"`
-	DMRConnected  bool        `json:"dmr_connected"`
-	YSFListening  bool        `json:"ysf_listening"`
-	ActiveCall    *CallState  `json:"active_call,omitempty"`
-	Stats         Statistics  `json:"stats"`
-	DMRNetwork    string      `json:"dmr_network,omitempty"`
-	DMRID         uint32      `json:"dmr_id,omitempty"`
-	TalkGroup     uint32      `json:"talk_group,omitempty"`
-	YSFCallsign   string      `json:"ysf_callsign,omitempty"`
+	Enabled      bool        `json:"enabled"`
+	DMRConnected bool        `json:"dmr_connected"`
+	YSFListening bool        `json:"ysf_listening"`
+	ActiveCall   *CallState  `json:"active_call,omitempty"`
+	Stats        *Statistics `json:"stats"`
+	DMRNetwork   string      `json:"dmr_network,omitempty"`
+	DMRID        uint32      `json:"dmr_id,omitempty"`
+	TalkGroup    uint32      `json:"talk_group,omitempty"`
+	YSFCallsign  string      `json:"ysf_callsign,omitempty"`
 }
 
 // GetStatus returns the current bridge status for the web dashboard
@@ -539,11 +553,12 @@ func (b *Bridge) GetStatus() BridgeStatus {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
+	stats := b.snapshotStats()
 	status := BridgeStatus{
 		Enabled:      b.running,
 		DMRConnected: b.dmrNetwork != nil,
 		YSFListening: b.ysfServer != nil,
-		Stats:        b.stats,
+		Stats:        &stats,
 	}
 
 	// Add DMR network info if connected
@@ -589,6 +604,4 @@ func extractYSFCallsign(data []byte) string {
 }
 
 // packetSource represents where a packet came from
-type packetSource struct {
-	addr *net.UDPAddr
-}
+// packetSource type was removed as it was not used.

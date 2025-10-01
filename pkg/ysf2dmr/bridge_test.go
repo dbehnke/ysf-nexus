@@ -49,8 +49,9 @@ func TestNewBridge(t *testing.T) {
 		t.Fatal("Bridge should not be nil")
 	}
 
-	if !bridge.IsRunning() {
-		// Bridge not started yet, this is expected
+	// Bridge not started yet; ensure IsRunning returns false
+	if bridge.IsRunning() {
+		t.Error("Bridge should not be running immediately after creation")
 	}
 }
 

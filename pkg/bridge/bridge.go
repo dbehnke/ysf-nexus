@@ -376,11 +376,7 @@ func (b *Bridge) sendPing() error {
 	return b.sendPacket(ping)
 }
 
-func (b *Bridge) sendDisconnect() error {
-	// Create YSF disconnect packet
-	disconnect := b.createDisconnectPacket()
-	return b.sendPacket(disconnect)
-}
+// sendDisconnect was intentionally removed; use sendDisconnectLocked when a lock is held.
 
 func (b *Bridge) sendDisconnectLocked() error {
 	// Create YSF disconnect packet

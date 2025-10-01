@@ -11,13 +11,13 @@ import (
 
 // MockDMRServer simulates a DMR network server for testing
 type MockDMRServer struct {
-	conn         *net.UDPConn
-	addr         *net.UDPAddr
-	clients      map[string]*net.UDPAddr
+	conn          *net.UDPConn
+	addr          *net.UDPAddr
+	clients       map[string]*net.UDPAddr
 	authenticated map[string]bool
-	salt         []byte
-	stopChan     chan struct{}
-	t            *testing.T
+	salt          []byte
+	stopChan      chan struct{}
+	t             *testing.T
 }
 
 // NewMockDMRServer creates a new mock DMR server
@@ -46,7 +46,9 @@ func (s *MockDMRServer) Start(ctx context.Context) {
 // Stop stops the mock server
 func (s *MockDMRServer) Stop() {
 	close(s.stopChan)
-	s.conn.Close()
+	if err := s.conn.Close(); err != nil {
+		s.t.Logf("Error closing mock server connection: %v", err)
+	}
 }
 
 // GetAddress returns the server address
@@ -70,7 +72,10 @@ func (s *MockDMRServer) handlePackets(ctx context.Context) {
 		case <-s.stopChan:
 			return
 		default:
-			s.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+			if err := s.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+				s.t.Logf("Failed to set read deadline: %v", err)
+				continue
+			}
 
 			length, addr, err := s.conn.ReadFromUDP(buffer)
 			if err != nil {
@@ -109,7 +114,9 @@ func (s *MockDMRServer) handlePacket(packet *Packet, addr *net.UDPAddr) {
 		copy(response[4:8], packet.Data[4:8])
 		copy(response[8:], s.salt)
 
-		s.conn.WriteToUDP(response, addr)
+		if _, err := s.conn.WriteToUDP(response, addr); err != nil {
+			s.t.Logf("Failed to write RPTA to UDP: %v", err)
+		}
 
 	case PacketTypeRPTK:
 		// Password hash - send RPTA confirmation
@@ -123,7 +130,9 @@ func (s *MockDMRServer) handlePacket(packet *Packet, addr *net.UDPAddr) {
 		copy(response[0:4], PacketTypeRPTA)
 		copy(response[4:8], packet.Data[4:8])
 
-		s.conn.WriteToUDP(response, addr)
+		if _, err := s.conn.WriteToUDP(response, addr); err != nil {
+			s.t.Logf("Failed to write RPTA confirmation to UDP: %v", err)
+		}
 
 	case PacketTypeRPTC:
 		// Configuration - send final RPTA
@@ -134,7 +143,9 @@ func (s *MockDMRServer) handlePacket(packet *Packet, addr *net.UDPAddr) {
 		copy(response[0:4], PacketTypeRPTA)
 		copy(response[4:8], packet.Data[4:8])
 
-		s.conn.WriteToUDP(response, addr)
+		if _, err := s.conn.WriteToUDP(response, addr); err != nil {
+			s.t.Logf("Failed to write final RPTA to UDP: %v", err)
+		}
 
 	case PacketTypeMSTP:
 		// Ping response - acknowledged
@@ -143,7 +154,9 @@ func (s *MockDMRServer) handlePacket(packet *Packet, addr *net.UDPAddr) {
 	case PacketTypeDMRD:
 		// DMR data packet - echo back for testing
 		s.t.Log("Mock server: Received DMRD, echoing back")
-		s.conn.WriteToUDP(packet.Data, addr)
+		if _, err := s.conn.WriteToUDP(packet.Data, addr); err != nil {
+			s.t.Logf("Failed to echo DMRD to UDP: %v", err)
+		}
 
 	default:
 		s.t.Logf("Mock server: Unknown packet type: %s", packet.Type)
@@ -167,7 +180,9 @@ func (s *MockDMRServer) SendPing(clientAddr *net.UDPAddr, repeaterID uint32) err
 func TestNetworkAuthentication(t *testing.T) {
 	// Create mock server
 	server := NewMockDMRServer(t)
-	defer server.Stop()
+	defer func() {
+		server.Stop()
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -204,7 +219,11 @@ func TestNetworkAuthentication(t *testing.T) {
 	if err := network.Start(ctx); err != nil {
 		t.Fatalf("Failed to start network: %v", err)
 	}
-	defer network.Stop()
+	defer func() {
+		if err := network.Stop(); err != nil {
+			t.Logf("Error stopping network: %v", err)
+		}
+	}()
 
 	// Verify authenticated
 	if !network.IsAuthenticated() {
@@ -222,7 +241,9 @@ func TestNetworkAuthentication(t *testing.T) {
 func TestNetworkSendVoicePackets(t *testing.T) {
 	// Create mock server
 	server := NewMockDMRServer(t)
-	defer server.Stop()
+	defer func() {
+		server.Stop()
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -249,7 +270,11 @@ func TestNetworkSendVoicePackets(t *testing.T) {
 	if err := network.Start(ctx); err != nil {
 		t.Fatalf("Failed to start network: %v", err)
 	}
-	defer network.Stop()
+	defer func() {
+		if err := network.Stop(); err != nil {
+			t.Logf("Error stopping network: %v", err)
+		}
+	}()
 
 	// Get stream ID
 	streamID := network.GetStreamID()
@@ -334,7 +359,9 @@ func TestNetworkStateTransitions(t *testing.T) {
 func BenchmarkSendVoiceData(b *testing.B) {
 	// Create mock server
 	server := NewMockDMRServer(&testing.T{})
-	defer server.Stop()
+	defer func() {
+		server.Stop()
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -360,13 +387,19 @@ func BenchmarkSendVoiceData(b *testing.B) {
 	if err := network.Start(ctx); err != nil {
 		b.Fatalf("Failed to start network: %v", err)
 	}
-	defer network.Stop()
+	defer func() {
+		if err := network.Stop(); err != nil {
+			b.Logf("Error stopping network: %v", err)
+		}
+	}()
 
 	streamID := network.GetStreamID()
 	voiceData := make([]byte, 33)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		network.SendVoiceData(1234567, 91, 2, CallTypeGroup, streamID, uint8(i%256), voiceData)
+		if err := network.SendVoiceData(1234567, 91, 2, CallTypeGroup, streamID, uint8(i%256), voiceData); err != nil {
+			b.Fatalf("SendVoiceData failed in benchmark: %v", err)
+		}
 	}
 }
