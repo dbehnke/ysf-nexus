@@ -52,10 +52,10 @@ type BridgeConfig struct {
 	Schedule    string        `mapstructure:"schedule"`
 	Duration    time.Duration `mapstructure:"duration"`
 	Enabled     bool          `mapstructure:"enabled"`
-	Permanent   bool          `mapstructure:"permanent"`     // If true, ignore schedule and stay connected always
-	MaxRetries  int           `mapstructure:"max_retries"`   // Max reconnection attempts (0 = infinite)
-	RetryDelay  time.Duration `mapstructure:"retry_delay"`   // Initial retry delay for exponential backoff
-	HealthCheck time.Duration `mapstructure:"health_check"`  // How often to check connection health
+	Permanent   bool          `mapstructure:"permanent"`    // If true, ignore schedule and stay connected always
+	MaxRetries  int           `mapstructure:"max_retries"`  // Max reconnection attempts (0 = infinite)
+	RetryDelay  time.Duration `mapstructure:"retry_delay"`  // Initial retry delay for exponential backoff
+	HealthCheck time.Duration `mapstructure:"health_check"` // How often to check connection health
 }
 
 // MQTTConfig holds MQTT client configuration

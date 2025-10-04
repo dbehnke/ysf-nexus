@@ -1,0 +1,59 @@
+name: Dependabot Scan Report
+
+on:
+  schedule:
+    - cron: '0 7 * * *' # daily at 07:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan open Dependabot PRs and post report
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            })
+            const depPRs = prs.data.filter(p => p.user && (p.user.login === 'dependabot[bot]' || p.user.login === 'dependabot-preview[bot]'))
+            if (depPRs.length === 0) {
+              console.log('No open Dependabot PRs found')
+            }
+
+            const rows = []
+            for (const p of depPRs) {
+              const title = p.title || ''
+              const matches = title.match(/[0-9]+(\.[0-9]+)+/g) || []
+              const from = matches[0] || ''
+              const to = matches[1] || ''
+              let allow = 'unknown'
+              if (!from || !to) {
+                allow = 'unknown'
+              } else {
+                const fromMaj = from.split('.')[0]
+                const toMaj = to.split('.')[0]
+                allow = (fromMaj === toMaj) ? 'yes' : 'no'
+              }
+              rows.push(`- #${p.number} ${p.title} -> from: ${from || '(none)'} to: ${to || '(none)'} allow_auto_merge: ${allow}`)
+            }
+
+            const body = `Dependabot scan report (${new Date().toISOString()})\n\n${rows.join('\n') || 'No open Dependabot PRs.'}`
+
+            // Find or create monitoring issue
+            const issues = await github.rest.issues.listForRepo({ owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100 })
+            let monitor = issues.data.find(i => i.title && i.title.toLowerCase().includes('dependabot monitor report'))
+            if (!monitor) {
+              const created = await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title: 'Dependabot Monitor Report', body: 'Automated report of Dependabot PR parsing and auto-merge decisions. This issue is updated daily.' })
+              monitor = created.data
+            }
+
+            // Post a comment to the monitoring issue
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: monitor.number, body })

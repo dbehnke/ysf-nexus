@@ -1,0 +1,11 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 5
+    # Optionally ignore extremely noisy major upgrades; adjust as-needed
+    #ignored_updates:
+    #  - match:
+    #      update_type: "version-update:semver-major"

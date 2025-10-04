@@ -433,12 +433,12 @@ func hexdumpSideBySide(b []byte) string {
 func (s *Server) GetListenAddress() *net.UDPAddr {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	if s.conn == nil {
 		// If not started yet, construct address from host and port
 		addr, _ := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", s.host, s.port))
 		return addr
 	}
-	
+
 	return s.conn.LocalAddr().(*net.UDPAddr)
 }

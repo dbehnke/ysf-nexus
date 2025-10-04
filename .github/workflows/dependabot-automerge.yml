@@ -1,0 +1,62 @@
+name: Dependabot Auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+jobs:
+  automerge:
+    # only run for Dependabot-created PRs
+    if: github.actor == 'dependabot[bot]' || github.actor == 'dependabot-preview[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - name: Get PR title
+        id: pr
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number
+            })
+            return pr.data.title
+
+      - name: Parse versions from title
+        id: parse
+        run: |
+          set -l title "${{ steps.pr.outputs.result }}"
+          # Dependabot titles often look like: "Bump package from 1.2.3 to 1.3.0"
+          # Extract the two version strings and compare majors.
+          # Use grep/awk to pull versions; fallback to allowing merge if parsing fails.
+          set -l from_ver (printf "%s" "$title" | grep -oE '[0-9]+(\.[0-9]+)+' | sed -n '1p' || echo)
+          set -l to_ver (printf "%s" "$title" | grep -oE '[0-9]+(\.[0-9]+)+' | sed -n '2p' || echo)
+          if test -z "$from_ver" -o -z "$to_ver" ;
+          then
+            echo "Could not parse versions from title; allowing auto-merge by default"
+            echo "allow_merge=true" >> $GITHUB_OUTPUT
+          else
+            set -l from_major (printf "%s" "$from_ver" | cut -d. -f1)
+            set -l to_major (printf "%s" "$to_ver" | cut -d. -f1)
+            if test "$from_major" = "$to_major" ;
+            then
+              echo "allow_merge=true" >> $GITHUB_OUTPUT
+            else
+              echo "allow_merge=false" >> $GITHUB_OUTPUT
+            end
+          end
+
+      - name: Enable Dependabot auto-merge
+        if: ${{ steps.parse.outputs.allow_merge == 'true' }}
+        uses: pascalgn/dependabot-auto-merge-action@v2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          merge_method: squash
+
+      - name: Skip auto-merge (major upgrade)
+        if: ${{ steps.parse.outputs.allow_merge == 'false' }}
+        run: |
+          echo "Detected semver-major bump; skipping auto-merge for manual review"

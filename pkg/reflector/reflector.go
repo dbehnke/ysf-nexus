@@ -55,8 +55,8 @@ type Reflector struct {
 	buildTime       string
 
 	// Bridge talker tracking
-	bridgeTalkers   map[string]*bridgeTalker // key: callsign+bridge_name
-	talkersMu       sync.RWMutex
+	bridgeTalkers map[string]*bridgeTalker // key: callsign+bridge_name
+	talkersMu     sync.RWMutex
 }
 
 // New creates a new YSF reflector
@@ -340,11 +340,11 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 					logger.Error(err))
 				return err
 			}
-			
+
 			r.logger.Debug("Forwarded bridge data to local repeaters",
 				logger.String("callsign", packet.Callsign),
 				logger.Int("repeaters", len(addresses)))
-			
+
 			// Update transmit statistics for all recipients
 			for _, addr := range addresses {
 				r.repeaterManager.ProcessTransmit(addr, len(packet.Data))
@@ -600,24 +600,24 @@ func (r *Reflector) cleanupBridgeTalkers(ctx context.Context) {
 func (r *Reflector) checkBridgeTalkerTimeouts() {
 	now := time.Now()
 	talkTimeout := 3 * time.Second // Consider talkers inactive after 3 seconds of no packets (matches repeater timeout)
-	
+
 	r.talkersMu.Lock()
 	defer r.talkersMu.Unlock()
-	
+
 	for key, talker := range r.bridgeTalkers {
 		if talker.isTalking && now.Sub(talker.lastSeen) > talkTimeout {
 			// Talker has timed out
 			duration := now.Sub(talker.startTime)
 			talker.isTalking = false
-			
+
 			// Send talk end event
 			r.sendBridgeEvent(repeater.EventTalkEnd, talker.callsign, talker.bridgeName, duration)
-			
+
 			r.logger.Info("Bridge talker ended",
 				logger.String("callsign", talker.callsign),
 				logger.String("bridge", talker.bridgeName),
 				logger.Duration("duration", duration))
-			
+
 			// Remove from active talkers
 			delete(r.bridgeTalkers, key)
 		}
@@ -628,7 +628,7 @@ func (r *Reflector) checkBridgeTalkerTimeouts() {
 func (r *Reflector) GetCurrentBridgeTalker() interface{} {
 	r.talkersMu.RLock()
 	defer r.talkersMu.RUnlock()
-	
+
 	// Find the first active bridge talker
 	for _, talker := range r.bridgeTalkers {
 		if talker.isTalking {
@@ -705,7 +705,7 @@ func (r *Reflector) handleStatusPacket(packet *network.Packet) error {
 func (r *Reflector) forwardToBridges(data []byte, callsign string) {
 	// Get bridge addresses from bridge manager
 	bridgeAddresses := r.bridgeManager.GetConnectedAddresses()
-	
+
 	if len(bridgeAddresses) > 0 {
 		// Forward data to all connected bridges
 		for _, addr := range bridgeAddresses {
@@ -720,7 +720,7 @@ func (r *Reflector) forwardToBridges(data []byte, callsign string) {
 					logger.String("bridge", addr.String()))
 			}
 		}
-		
+
 		r.logger.Debug("Forwarded local repeater traffic to bridges",
 			logger.String("callsign", callsign),
 			logger.Int("bridges", len(bridgeAddresses)))
