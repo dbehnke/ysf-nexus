@@ -218,10 +218,12 @@ func (b *MockBridgeEndpoint) GetTalkerHistory(limit int) []*BridgeTalker {
 		limit = len(b.talkerHistory)
 	}
 
-	// Return most recent entries
-	start := len(b.talkerHistory) - limit
+	// Return most recent entries in reverse chronological order (most recent first)
 	history := make([]*BridgeTalker, limit)
-	copy(history, b.talkerHistory[start:])
+	for i := 0; i < limit; i++ {
+		// take from the end of the slice backwards
+		history[i] = b.talkerHistory[len(b.talkerHistory)-1-i]
+	}
 
 	return history
 }
