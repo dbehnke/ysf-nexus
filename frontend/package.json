@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
-    "@vue/eslint-config-prettier": "^9.0.0",
+    "@vue/eslint-config-prettier": "^10.2.0",
     "autoprefixer": "^10.4.21",
     "eslint": "^8.56.0",
     "eslint-plugin-vue": "^9.19.0",
