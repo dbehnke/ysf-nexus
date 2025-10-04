@@ -215,12 +215,7 @@ func (m *Manager) setupScheduleTracking(config config.BridgeConfig) {
 	m.mu.Unlock()
 }
 
-// shouldStartNow determines if a scheduled bridge should start now due to missed schedule
-// Deprecated: Use shouldStartNowWithDuration instead
-func (m *Manager) shouldStartNow(config config.BridgeConfig) bool {
-	shouldStart, _ := m.shouldStartNowWithDuration(config)
-	return shouldStart
-}
+// NOTE: shouldStartNow was removed in favor of shouldStartNowWithDuration
 
 // shouldStartNowWithDuration determines if a scheduled bridge should start now and returns remaining duration
 func (m *Manager) shouldStartNowWithDuration(config config.BridgeConfig) (bool, time.Duration) {
@@ -337,12 +332,7 @@ func (m *Manager) checkMissedSchedules() {
 	}
 }
 
-// shouldRecoverSchedule determines if a schedule should be recovered
-// Deprecated: Use shouldRecoverScheduleWithDuration instead
-func (m *Manager) shouldRecoverSchedule(schedInfo *ScheduleInfo) bool {
-	shouldRecover, _ := m.shouldRecoverScheduleWithDuration(schedInfo)
-	return shouldRecover
-}
+// NOTE: shouldRecoverSchedule was removed in favor of shouldRecoverScheduleWithDuration
 
 // shouldRecoverScheduleWithDuration determines if a schedule should be recovered and returns remaining duration
 func (m *Manager) shouldRecoverScheduleWithDuration(schedInfo *ScheduleInfo) (bool, time.Duration) {
