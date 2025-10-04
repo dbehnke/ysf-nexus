@@ -9,19 +9,34 @@ import (
 
 	"github.com/dbehnke/ysf-nexus/pkg/config"
 	"github.com/dbehnke/ysf-nexus/pkg/logger"
+	"github.com/dbehnke/ysf-nexus/pkg/network"
 	"github.com/robfig/cron/v3"
 )
+
+// BridgeRunner is the common interface for all bridge types
+type BridgeRunner interface {
+	RunPermanent(ctx context.Context)
+	RunScheduled(ctx context.Context, duration time.Duration)
+	GetStatus() BridgeStatus
+	GetName() string
+	GetType() string
+	SetNextSchedule(t *time.Time)
+	IsConnected() bool
+	Disconnect() error
+}
 
 // Manager manages multiple bridge connections with scheduling
 type Manager struct {
 	config []config.BridgeConfig
 	logger *logger.Logger
-	server NetworkServer
-	cron   *cron.Cron
+	server *network.Server
+	// provider to obtain addresses of repeaters (populated by reflector)
+	repeaterAddrProvider func() []*net.UDPAddr
+	cron                 *cron.Cron
 
-	// Bridge tracking
+	// Bridge tracking (now supports both YSF and DMR bridges)
 	mu      sync.RWMutex
-	bridges map[string]*Bridge
+	bridges map[string]BridgeRunner
 
 	// Schedule tracking for missed recovery
 	schedules map[string]*ScheduleInfo
@@ -66,33 +81,36 @@ const (
 
 // BridgeStatus holds runtime status information for a bridge
 type BridgeStatus struct {
-	Name           string        `json:"name"`
-	State          BridgeState   `json:"state"`
-	ConnectedAt    *time.Time    `json:"connected_at,omitempty"`
-	DisconnectedAt *time.Time    `json:"disconnected_at,omitempty"`
-	NextSchedule   *time.Time    `json:"next_schedule,omitempty"`
-	Duration       time.Duration `json:"duration,omitempty"`
-	RetryCount     int           `json:"retry_count"`
-	LastError      string        `json:"last_error,omitempty"`
-	PacketsRx      uint64        `json:"packets_rx"`
-	PacketsTx      uint64        `json:"packets_tx"`
-	BytesRx        uint64        `json:"bytes_rx"`
-	BytesTx        uint64        `json:"bytes_tx"`
+	Name           string                 `json:"name"`
+	Type           string                 `json:"type"` // Bridge type: "ysf" or "dmr"
+	State          BridgeState            `json:"state"`
+	ConnectedAt    *time.Time             `json:"connected_at,omitempty"`
+	DisconnectedAt *time.Time             `json:"disconnected_at,omitempty"`
+	NextSchedule   *time.Time             `json:"next_schedule,omitempty"`
+	Duration       time.Duration          `json:"duration,omitempty"`
+	RetryCount     int                    `json:"retry_count"`
+	LastError      string                 `json:"last_error,omitempty"`
+	PacketsRx      uint64                 `json:"packets_rx"`
+	PacketsTx      uint64                 `json:"packets_tx"`
+	BytesRx        uint64                 `json:"bytes_rx"`
+	BytesTx        uint64                 `json:"bytes_tx"`
+	Metadata       map[string]interface{} `json:"metadata,omitempty"` // Type-specific metadata
 }
 
 // NewManager creates a new bridge manager
-func NewManager(config []config.BridgeConfig, server NetworkServer, logger *logger.Logger) *Manager {
+func NewManager(config []config.BridgeConfig, server *network.Server, logger *logger.Logger, repeaterAddrProvider func() []*net.UDPAddr) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Manager{
-		config:    config,
-		logger:    logger,
-		server:    server,
-		cron:      cron.New(cron.WithSeconds()),
-		bridges:   make(map[string]*Bridge),
-		schedules: make(map[string]*ScheduleInfo),
-		ctx:       ctx,
-		cancel:    cancel,
+		config:               config,
+		logger:               logger,
+		server:               server,
+		repeaterAddrProvider: repeaterAddrProvider,
+		cron:                 cron.New(cron.WithSeconds()),
+		bridges:              make(map[string]BridgeRunner),
+		schedules:            make(map[string]*ScheduleInfo),
+		ctx:                  ctx,
+		cancel:               cancel,
 	}
 }
 
@@ -142,7 +160,36 @@ func (m *Manager) runMissedScheduleRecovery() {
 
 // setupBridge configures a bridge based on its type (permanent or scheduled)
 func (m *Manager) setupBridge(config config.BridgeConfig) error {
-	bridge := NewBridge(config, m.server, m.logger)
+	// Default type to "ysf" if not specified
+	bridgeType := config.Type
+	if bridgeType == "" {
+		bridgeType = "ysf"
+	}
+
+	var bridge BridgeRunner
+	var err error
+
+	// Create appropriate bridge type
+	switch bridgeType {
+	case "ysf":
+		ysfBridge := NewBridge(config, m.server, m.logger)
+		bridge = ysfBridge
+		m.logger.Info("Created YSF bridge", logger.String("name", config.Name))
+
+	case "dmr":
+		dmrBridge, err := NewDMRBridgeAdapter(config, m.logger, m.server, m.repeaterAddrProvider)
+		if err != nil {
+			return fmt.Errorf("failed to create DMR bridge %s: %w", config.Name, err)
+		}
+		bridge = dmrBridge
+		m.logger.Info("Created DMR bridge",
+			logger.String("name", config.Name),
+			logger.String("network", config.DMR.Network),
+			logger.Uint32("talk_group", config.DMR.TalkGroup))
+
+	default:
+		return fmt.Errorf("unsupported bridge type: %s", bridgeType)
+	}
 
 	m.mu.Lock()
 	m.bridges[config.Name] = bridge
@@ -151,13 +198,15 @@ func (m *Manager) setupBridge(config config.BridgeConfig) error {
 	if config.Permanent {
 		// Start permanent bridge immediately
 		go bridge.RunPermanent(m.ctx)
-		m.logger.Info("Started permanent bridge", logger.String("name", config.Name))
+		m.logger.Info("Started permanent bridge",
+			logger.String("name", config.Name),
+			logger.String("type", bridgeType))
 	} else if config.Schedule != "" {
 		// Set up schedule tracking for missed recovery
 		m.setupScheduleTracking(config)
 
 		// Schedule the bridge using cron
-		_, err := m.cron.AddFunc(config.Schedule, func() {
+		_, err = m.cron.AddFunc(config.Schedule, func() {
 			m.startScheduledBridge(config.Name, config.Duration)
 		})
 		if err != nil {
@@ -166,6 +215,7 @@ func (m *Manager) setupBridge(config config.BridgeConfig) error {
 
 		m.logger.Info("Scheduled bridge",
 			logger.String("name", config.Name),
+			logger.String("type", bridgeType),
 			logger.String("schedule", config.Schedule))
 
 		// Check if we should start this bridge now (missed schedule recovery)
@@ -182,8 +232,7 @@ func (m *Manager) setupBridge(config config.BridgeConfig) error {
 
 // setupScheduleTracking initializes schedule tracking for missed recovery
 func (m *Manager) setupScheduleTracking(config config.BridgeConfig) {
-	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
-	schedule, err := parser.Parse(config.Schedule)
+	schedule, err := parseSchedule(config.Schedule)
 	if err != nil {
 		m.logger.Error("Failed to parse schedule for tracking",
 			logger.String("name", config.Name),
@@ -209,17 +258,11 @@ func (m *Manager) setupScheduleTracking(config config.BridgeConfig) {
 	m.mu.Unlock()
 }
 
-// shouldStartNow determines if a scheduled bridge should start now due to missed schedule
-// Deprecated: Use shouldStartNowWithDuration instead
-func (m *Manager) shouldStartNow(config config.BridgeConfig) bool {
-	shouldStart, _ := m.shouldStartNowWithDuration(config)
-	return shouldStart
-}
+// (deprecated wrapper removed)
 
 // shouldStartNowWithDuration determines if a scheduled bridge should start now and returns remaining duration
 func (m *Manager) shouldStartNowWithDuration(config config.BridgeConfig) (bool, time.Duration) {
-	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
-	schedule, err := parser.Parse(config.Schedule)
+	schedule, err := parseSchedule(config.Schedule)
 	if err != nil {
 		return false, 0
 	}
@@ -317,6 +360,21 @@ func (m *Manager) updateScheduleExecution(name string) {
 	}
 }
 
+// parseSchedule tries parsing a cron expression that may include seconds (6 fields)
+// or just standard minute-based expressions (5 fields). It tries the parser with
+// seconds first, and falls back to the 5-field parser.
+func parseSchedule(expr string) (cron.Schedule, error) {
+	// Try with seconds
+	secParser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	if sched, err := secParser.Parse(expr); err == nil {
+		return sched, nil
+	}
+
+	// Fall back to minute-based (no seconds)
+	minParser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	return minParser.Parse(expr)
+}
+
 // checkMissedSchedules checks for schedules that should be running but aren't
 func (m *Manager) checkMissedSchedules() {
 	m.mu.RLock()
@@ -343,12 +401,7 @@ func (m *Manager) checkMissedSchedules() {
 	}
 }
 
-// shouldRecoverSchedule determines if a schedule should be recovered
-// Deprecated: Use shouldRecoverScheduleWithDuration instead
-func (m *Manager) shouldRecoverSchedule(schedInfo *ScheduleInfo) bool {
-	shouldRecover, _ := m.shouldRecoverScheduleWithDuration(schedInfo)
-	return shouldRecover
-}
+// (deprecated wrapper removed)
 
 // shouldRecoverScheduleWithDuration determines if a schedule should be recovered and returns remaining duration
 func (m *Manager) shouldRecoverScheduleWithDuration(schedInfo *ScheduleInfo) (bool, time.Duration) {
@@ -429,28 +482,37 @@ func (m *Manager) GetStatus() map[string]BridgeStatus {
 	return status
 }
 
-// GetBridge returns a bridge by name
+// GetBridge returns a bridge by name (returns YSF bridge or nil if DMR)
 func (m *Manager) GetBridge(name string) *Bridge {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	return m.bridges[name]
+	// Type assert to *Bridge - will be nil if it's a DMR bridge
+	if bridge, ok := m.bridges[name].(*Bridge); ok {
+		return bridge
+	}
+	return nil
 }
 
-// IsBridgeAddress checks if an address belongs to a bridge connection
+// IsBridgeAddress checks if an address belongs to a YSF bridge connection
+// (DMR bridges don't use UDP addresses in the same way)
 func (m *Manager) IsBridgeAddress(addr *net.UDPAddr) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	for _, bridge := range m.bridges {
-		if bridge.IsConnectedTo(addr) {
-			return true
+	for _, bridgeRunner := range m.bridges {
+		// Only YSF bridges have IsConnectedTo method
+		if ysfBridge, ok := bridgeRunner.(*Bridge); ok {
+			if ysfBridge.IsConnectedTo(addr) {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-// HandleIncomingPacket processes packets received from bridge connections
+// HandleIncomingPacket processes packets received from YSF bridge connections
+// (Only applies to YSF bridges, DMR bridges handle packets internally)
 func (m *Manager) HandleIncomingPacket(data []byte, fromAddr *net.UDPAddr) {
 	// Forward packets from bridge connections to all local repeaters
 	// This will be called by the network server when it receives packets
@@ -459,38 +521,101 @@ func (m *Manager) HandleIncomingPacket(data []byte, fromAddr *net.UDPAddr) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// Find which bridge this packet came from
-	for _, bridge := range m.bridges {
-		if bridge.IsConnectedTo(fromAddr) {
-			m.logger.Debug("Received packet from bridge",
-				logger.String("bridge", bridge.GetName()),
-				logger.String("addr", fromAddr.String()),
-				logger.Int("size", len(data)))
+	// Find which YSF bridge this packet came from
+	for _, bridgeRunner := range m.bridges {
+		if ysfBridge, ok := bridgeRunner.(*Bridge); ok {
+			if ysfBridge.IsConnectedTo(fromAddr) {
+				m.logger.Debug("Received packet from YSF bridge",
+					logger.String("bridge", ysfBridge.GetName()),
+					logger.String("addr", fromAddr.String()),
+					logger.Int("size", len(data)))
 
-			bridge.IncrementRxStats(uint64(len(data)))
+				ysfBridge.IncrementRxStats(uint64(len(data)))
 
-			// Notify bridge of received packet (for ping response handling)
-			bridge.OnPacketReceived(data)
+				// Notify bridge of received packet (for ping response handling)
+				ysfBridge.OnPacketReceived(data)
 
-			// TODO: Forward to local repeaters (implement packet routing)
-			// This would integrate with the main reflector's packet routing system
-			break
+				// TODO: Forward to local repeaters (implement packet routing)
+				// This would integrate with the main reflector's packet routing system
+				break
+			}
 		}
 	}
 }
 
-// GetConnectedAddresses returns the addresses of all currently connected bridges
+// GetConnectedAddresses returns the addresses of all currently connected YSF bridges
+// (DMR bridges don't have UDP addresses)
 func (m *Manager) GetConnectedAddresses() []*net.UDPAddr {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	var addresses []*net.UDPAddr
-	for _, bridge := range m.bridges {
-		if bridge.IsConnected() {
-			if addr := bridge.GetRemoteAddr(); addr != nil {
-				addresses = append(addresses, addr)
+	for _, bridgeRunner := range m.bridges {
+		// Only YSF bridges have GetRemoteAddr
+		if ysfBridge, ok := bridgeRunner.(*Bridge); ok {
+			if ysfBridge.IsConnected() {
+				if addr := ysfBridge.GetRemoteAddr(); addr != nil {
+					addresses = append(addresses, addr)
+				}
 			}
 		}
 	}
 	return addresses
+}
+
+// ForwardToDMRBridges forwards YSF packets to all connected DMR bridges for conversion
+func (m *Manager) ForwardToDMRBridges(data []byte, callsign string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	dmrBridgeCount := 0
+	for _, bridgeRunner := range m.bridges {
+		// Only DMR bridges need packet injection
+		if dmrBridge, ok := bridgeRunner.(*DMRBridgeAdapter); ok {
+			if dmrBridge.IsConnected() {
+				dmrBridgeCount++
+
+				// Parse the packet data to create a network.Packet
+				// We need to create a minimal packet structure for the bridge
+				packet := &network.Packet{
+					Type:     "YSFD",
+					Data:     data,
+					Callsign: callsign,
+					// Source address doesn't matter for DMR bridge injection
+					Source: &net.UDPAddr{IP: net.IPv4zero, Port: 0},
+				}
+
+				// Extract source callsign if available from packet data
+				if len(data) >= 24 {
+					// Source callsign is at bytes 14-23 (10 bytes)
+					srcCS := string(data[14:24])
+					// Trim spaces and null bytes
+					for i, c := range srcCS {
+						if c == 0 || c == ' ' {
+							srcCS = srcCS[:i]
+							break
+						}
+					}
+					packet.SourceCS = srcCS
+				}
+
+				if err := dmrBridge.InjectYSFPacket(packet); err != nil {
+					m.logger.Debug("Failed to forward to DMR bridge",
+						logger.String("bridge", dmrBridge.GetName()),
+						logger.String("callsign", callsign),
+						logger.Error(err))
+				} else {
+					m.logger.Debug("Forwarded to DMR bridge",
+						logger.String("bridge", dmrBridge.GetName()),
+						logger.String("callsign", callsign))
+				}
+			}
+		}
+	}
+
+	if dmrBridgeCount > 0 {
+		m.logger.Debug("Forwarded local repeater traffic to DMR bridges",
+			logger.String("callsign", callsign),
+			logger.Int("dmr_bridges", dmrBridgeCount))
+	}
 }

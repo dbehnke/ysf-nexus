@@ -5,6 +5,7 @@ import Bridges from '@/views/Bridges.vue'
 import TalkLogs from '@/views/TalkLogs.vue'
 import Settings from '@/views/Settings.vue'
 import Login from '@/views/Login.vue'
+import YSF2DMR from '@/views/YSF2DMR.vue'
 
 const routes = [
   {
@@ -26,6 +27,11 @@ const routes = [
     path: '/logs',
     name: 'TalkLogs',
     component: TalkLogs
+  },
+  {
+    path: '/ysf2dmr',
+    name: 'YSF2DMR',
+    component: YSF2DMR
   },
   {
     path: '/settings',

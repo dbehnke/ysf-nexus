@@ -10,6 +10,7 @@ import (
 
 	"github.com/dbehnke/ysf-nexus/pkg/config"
 	"github.com/dbehnke/ysf-nexus/pkg/logger"
+	"github.com/dbehnke/ysf-nexus/pkg/network"
 )
 
 // Bridge represents a connection to another YSF reflector
@@ -159,6 +160,11 @@ func (b *Bridge) RunScheduled(ctx context.Context, duration time.Duration) {
 func (b *Bridge) connect(ctx context.Context) error {
 	b.setState(StateConnecting)
 
+	// Check if server is initialized (handle interface nil correctly)
+	if b.server == nil || !isValidServer(b.server) {
+		return fmt.Errorf("bridge server not initialized")
+	}
+
 	// Resolve the remote address
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", b.config.Host, b.config.Port))
 	if err != nil {
@@ -168,6 +174,11 @@ func (b *Bridge) connect(ctx context.Context) error {
 	b.mu.Lock()
 	b.remoteAddr = addr
 	b.mu.Unlock()
+
+	// Debug: verify server is not nil before sendHandshake
+	if b.server == nil {
+		panic("TEST: server is nil right before sendHandshake")
+	}
 
 	// Send initial connection packet (YSF handshake)
 	if err := b.sendHandshake(); err != nil {
@@ -376,11 +387,7 @@ func (b *Bridge) sendPing() error {
 	return b.sendPacket(ping)
 }
 
-func (b *Bridge) sendDisconnect() error {
-	// Create YSF disconnect packet
-	disconnect := b.createDisconnectPacket()
-	return b.sendPacket(disconnect)
-}
+// sendDisconnect was intentionally removed; use sendDisconnectLocked when a lock is held.
 
 func (b *Bridge) sendDisconnectLocked() error {
 	// Create YSF disconnect packet
@@ -416,6 +423,24 @@ func (b *Bridge) sendPacketLocked(data []byte) error {
 	}
 
 	return err
+}
+
+// isValidServer checks if a NetworkServer interface holds a non-nil concrete value
+func isValidServer(server NetworkServer) bool {
+	// Try to call a safe method that doesn't require initialization
+	// If the concrete value is nil, this will panic, so we recover
+	defer func() {
+		recover() // Catch any panics from calling methods on nil
+	}()
+
+	// Alternative: use type assertion to check for nil
+	switch v := server.(type) {
+	case *network.Server:
+		return v != nil
+	default:
+		// For other implementations, assume valid if interface is not nil
+		return server != nil
+	}
 }
 
 // Packet creation methods (placeholder implementations)
@@ -473,6 +498,7 @@ func (b *Bridge) GetStatus() BridgeStatus {
 
 	return BridgeStatus{
 		Name:           b.config.Name,
+		Type:           "ysf",
 		State:          b.state,
 		ConnectedAt:    b.connectedAt,
 		DisconnectedAt: b.disconnectedAt,
@@ -489,6 +515,15 @@ func (b *Bridge) GetStatus() BridgeStatus {
 
 func (b *Bridge) GetName() string {
 	return b.config.Name
+}
+
+func (b *Bridge) GetType() string {
+	return "ysf"
+}
+
+func (b *Bridge) Disconnect() error {
+	b.disconnect()
+	return nil
 }
 
 func (b *Bridge) IsConnectedTo(addr *net.UDPAddr) bool {

@@ -12,6 +12,7 @@ import (
 	"github.com/dbehnke/ysf-nexus/pkg/network"
 	"github.com/dbehnke/ysf-nexus/pkg/repeater"
 	"github.com/dbehnke/ysf-nexus/pkg/web"
+	"github.com/dbehnke/ysf-nexus/pkg/ysf2dmr"
 )
 
 // bridgeTalker tracks bridge talker state
@@ -47,6 +48,7 @@ type Reflector struct {
 	server          *network.Server
 	repeaterManager *repeater.Manager
 	bridgeManager   *bridge.Manager
+	ysf2dmrBridge   *ysf2dmr.Bridge
 	webServer       *web.Server
 	eventChan       chan repeater.Event
 	running         bool
@@ -55,8 +57,8 @@ type Reflector struct {
 	buildTime       string
 
 	// Bridge talker tracking
-	bridgeTalkers   map[string]*bridgeTalker // key: callsign+bridge_name
-	talkersMu       sync.RWMutex
+	bridgeTalkers map[string]*bridgeTalker // key: callsign+bridge_name
+	talkersMu     sync.RWMutex
 }
 
 // New creates a new YSF reflector
@@ -80,6 +82,10 @@ func NewWithVersion(cfg *config.Config, log *logger.Logger, version, buildTime s
 	// Initialize network server
 	r.server = network.NewServer(cfg.Server.Host, cfg.Server.Port)
 	r.server.SetDebug(cfg.Logging.Level == "debug")
+	log.Info("Reflector network server created",
+		logger.String("host", cfg.Server.Host),
+		logger.Int("port", cfg.Server.Port),
+		logger.Any("server_instance", fmt.Sprintf("%p", r.server)))
 
 	// Initialize repeater manager
 	r.repeaterManager = repeater.NewManagerWithLogger(
@@ -92,7 +98,18 @@ func NewWithVersion(cfg *config.Config, log *logger.Logger, version, buildTime s
 	)
 
 	// Initialize bridge manager
-	r.bridgeManager = bridge.NewManager(cfg.Bridges, r.server, r.logger)
+	r.bridgeManager = bridge.NewManager(cfg.Bridges, r.server, r.logger, r.repeaterManager.GetAllAddresses)
+
+	// Initialize YSF2DMR bridge if enabled
+	if cfg.YSF2DMR.Enabled {
+		ysf2dmrBridge, err := ysf2dmr.NewBridgeWithServer(cfg.YSF2DMR, r.logger, r.server, r.repeaterManager.GetAllAddresses)
+		if err != nil {
+			r.logger.Error("Failed to create YSF2DMR bridge", logger.Error(err))
+		} else {
+			r.ysf2dmrBridge = ysf2dmrBridge
+			r.logger.Info("YSF2DMR bridge initialized")
+		}
+	}
 
 	// Initialize web server
 	r.webServer = web.NewServer(cfg, log, r.repeaterManager, eventChan, r.bridgeManager, r, version, buildTime)
@@ -170,6 +187,17 @@ func (r *Reflector) Start(ctx context.Context) error {
 		r.cleanupBridgeTalkers(ctx)
 	}()
 
+	// Start YSF2DMR bridge if enabled
+	if r.ysf2dmrBridge != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := r.ysf2dmrBridge.Start(ctx); err != nil {
+				r.logger.Error("YSF2DMR bridge error", logger.Error(err))
+			}
+		}()
+	}
+
 	// Start network server (blocking)
 	serverErr := make(chan error, 1)
 	wg.Add(1)
@@ -205,6 +233,11 @@ func (r *Reflector) IsRunning() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.running
+}
+
+// GetYSF2DMRBridge returns the YSF2DMR bridge (may be nil if not enabled)
+func (r *Reflector) GetYSF2DMRBridge() *ysf2dmr.Bridge {
+	return r.ysf2dmrBridge
 }
 
 // GetStats returns current reflector statistics
@@ -340,11 +373,11 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 					logger.Error(err))
 				return err
 			}
-			
+
 			r.logger.Debug("Forwarded bridge data to local repeaters",
 				logger.String("callsign", packet.Callsign),
 				logger.Int("repeaters", len(addresses)))
-			
+
 			// Update transmit statistics for all recipients
 			for _, addr := range addresses {
 				r.repeaterManager.ProcessTransmit(addr, len(packet.Data))
@@ -600,24 +633,24 @@ func (r *Reflector) cleanupBridgeTalkers(ctx context.Context) {
 func (r *Reflector) checkBridgeTalkerTimeouts() {
 	now := time.Now()
 	talkTimeout := 3 * time.Second // Consider talkers inactive after 3 seconds of no packets (matches repeater timeout)
-	
+
 	r.talkersMu.Lock()
 	defer r.talkersMu.Unlock()
-	
+
 	for key, talker := range r.bridgeTalkers {
 		if talker.isTalking && now.Sub(talker.lastSeen) > talkTimeout {
 			// Talker has timed out
 			duration := now.Sub(talker.startTime)
 			talker.isTalking = false
-			
+
 			// Send talk end event
 			r.sendBridgeEvent(repeater.EventTalkEnd, talker.callsign, talker.bridgeName, duration)
-			
+
 			r.logger.Info("Bridge talker ended",
 				logger.String("callsign", talker.callsign),
 				logger.String("bridge", talker.bridgeName),
 				logger.Duration("duration", duration))
-			
+
 			// Remove from active talkers
 			delete(r.bridgeTalkers, key)
 		}
@@ -628,7 +661,7 @@ func (r *Reflector) checkBridgeTalkerTimeouts() {
 func (r *Reflector) GetCurrentBridgeTalker() interface{} {
 	r.talkersMu.RLock()
 	defer r.talkersMu.RUnlock()
-	
+
 	// Find the first active bridge talker
 	for _, talker := range r.bridgeTalkers {
 		if talker.isTalking {
@@ -701,30 +734,33 @@ func (r *Reflector) handleStatusPacket(packet *network.Packet) error {
 // processEvents was removed because events are forwarded/consumed elsewhere. If needed,
 // reintroduce with careful event channel ownership semantics.
 
-// forwardToBridges forwards local repeater traffic to all connected bridges
+// forwardToBridges forwards local repeater traffic to all connected bridges (YSF and DMR)
 func (r *Reflector) forwardToBridges(data []byte, callsign string) {
-	// Get bridge addresses from bridge manager
+	// Get YSF bridge addresses from bridge manager
 	bridgeAddresses := r.bridgeManager.GetConnectedAddresses()
-	
+
 	if len(bridgeAddresses) > 0 {
-		// Forward data to all connected bridges
+		// Forward data to all connected YSF bridges via UDP
 		for _, addr := range bridgeAddresses {
 			if err := r.server.SendPacket(data, addr); err != nil {
-				r.logger.Error("Failed to forward data to bridge",
+				r.logger.Error("Failed to forward data to YSF bridge",
 					logger.String("callsign", callsign),
 					logger.String("bridge", addr.String()),
 					logger.Error(err))
 			} else {
-				r.logger.Debug("Forwarded local data to bridge",
+				r.logger.Debug("Forwarded local data to YSF bridge",
 					logger.String("callsign", callsign),
 					logger.String("bridge", addr.String()))
 			}
 		}
-		
-		r.logger.Debug("Forwarded local repeater traffic to bridges",
+
+		r.logger.Debug("Forwarded local repeater traffic to YSF bridges",
 			logger.String("callsign", callsign),
-			logger.Int("bridges", len(bridgeAddresses)))
+			logger.Int("ysf_bridges", len(bridgeAddresses)))
 	}
+
+	// Also forward to DMR bridges (these need to convert YSF → DMR)
+	r.bridgeManager.ForwardToDMRBridges(data, callsign)
 }
 
 // logStats periodically logs statistics

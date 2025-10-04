@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	stdlog "log"
 	"net/http"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -33,6 +34,8 @@ type IntegrationTestSuite struct {
 	// HTTP client for API testing
 	httpClient *http.Client
 	baseURL    string
+	// apiServer is the optional in-process HTTP server used for API testing
+	apiServer *http.Server
 
 	// Context for cleanup
 	ctx    context.Context
@@ -49,6 +52,10 @@ type TestConfig struct {
 	// API settings
 	APIBaseURL string
 	APITimeout time.Duration
+	// StartWebServer indicates whether the test suite should start an in-process web server
+	// for exercising HTTP API endpoints. When true, the suite will start the server on
+	// 127.0.0.1:(BasePort+800) and set APIBaseURL accordingly.
+	StartWebServer bool
 
 	// Test behavior
 	ActivityDuration time.Duration
@@ -99,6 +106,57 @@ func NewIntegrationTestSuite(config TestConfig) *IntegrationTestSuite {
 		baseURL: config.APIBaseURL,
 		ctx:     ctx,
 		cancel:  cancel,
+	}
+
+	// If requested, start an in-process web server for API testing.
+	if config.StartWebServer {
+		// Determine listen address from configured APIBaseURL if possible
+		listenHostPort := "127.0.0.1:8080"
+		if config.APIBaseURL != "" {
+			if u, err := url.Parse(config.APIBaseURL); err == nil && u.Host != "" {
+				listenHostPort = u.Host
+			}
+		}
+
+		mux := http.NewServeMux()
+		// current-talker handler: query mock bridge network for an active talker
+		mux.HandleFunc("/api/current-talker", func(w http.ResponseWriter, r *http.Request) {
+			// default null response
+			resp := map[string]interface{}{"current_talker": nil}
+
+			// Check mock bridges for an active talker
+			for _, bid := range suite.bridges {
+				b := suite.bridgeNetwork.GetBridge(bid)
+				if b == nil {
+					continue
+				}
+				if ct := b.GetCurrentTalker(); ct != nil {
+					resp = map[string]interface{}{"current_talker": map[string]interface{}{
+						"callsign":      ct.Callsign,
+						"address":       b.Name,
+						"type":          "bridge",
+						"is_talking":    true,
+						"talk_duration": ct.Duration,
+					}}
+					break
+				}
+			}
+
+			_ = json.NewEncoder(w).Encode(resp)
+		})
+
+		server := &http.Server{Addr: listenHostPort, Handler: mux}
+		suite.apiServer = server
+
+		go func() {
+			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				stdlog.Printf("integration api server error: %v", err)
+			}
+		}()
+
+		// update baseURL and httpClient to point to started server
+		suite.baseURL = fmt.Sprintf("http://%s", listenHostPort)
+		suite.httpClient = &http.Client{Timeout: config.APITimeout}
 	}
 
 	// Start event collector
@@ -227,6 +285,15 @@ func (s *IntegrationTestSuite) Teardown(t *testing.T) {
 
 	// Cancel context and cleanup
 	s.cancel()
+
+	// Shutdown optional in-process API server if started
+	if s.apiServer != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := s.apiServer.Shutdown(ctx); err != nil {
+			stdlog.Printf("failed to shutdown api server: %v", err)
+		}
+	}
 
 	// Log final statistics
 	s.eventsLock.RLock()
@@ -631,7 +698,7 @@ func (s *IntegrationTestSuite) collectEvents() {
 			s.eventsLock.Unlock()
 
 			if s.config.VerboseLogging {
-				log.Printf("Event: %s from %s - %s", event.Type, event.Source, event.Description)
+				stdlog.Printf("Event: %s from %s - %s", event.Type, event.Source, event.Description)
 			}
 
 		case <-s.ctx.Done():

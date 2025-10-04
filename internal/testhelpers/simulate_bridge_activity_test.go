@@ -15,6 +15,10 @@ func TestSimulateBridgeActivity(t *testing.T) {
 	config.APIBaseURL = "http://localhost:8080"
 	config.APITimeout = 3 * time.Second
 
+	// Use the in-process API server provided by the test suite so tests
+	// don't depend on an externally running web server.
+	config.StartWebServer = true
+
 	suite := NewIntegrationTestSuite(config)
 	if err := suite.Setup(t); err != nil {
 		t.Fatalf("Failed to setup test suite: %v", err)

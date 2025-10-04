@@ -93,7 +93,7 @@ func NewServer(cfg *config.Config, log *logger.Logger, manager *repeater.Manager
 		broadcast:  make(chan []byte, 256),
 		register:   make(chan *websocket.Conn),
 		unregister: make(chan *websocket.Conn),
-		}
+	}
 	// Assign logger to hub for internal logging
 	hub.logger = log.WithComponent("web.hub")
 
@@ -207,6 +207,9 @@ func (s *Server) setupRoutes() *mux.Router {
 
 	// System endpoints
 	api.HandleFunc("/system/info", s.handleSystemInfo).Methods("GET")
+
+	// YSF2DMR endpoints
+	api.HandleFunc("/ysf2dmr/status", s.handleYSF2DMRStatus).Methods("GET")
 
 	// Authentication endpoints
 	api.HandleFunc("/auth/login", s.handleLogin).Methods("POST")
@@ -557,11 +560,13 @@ func (s *Server) handleRepeaters(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleBridges(w http.ResponseWriter, r *http.Request) {
 	bridges := make(map[string]interface{})
-	
+
 	// Check if bridge manager is available and has GetStatus method
 	if s.bridgeManager != nil {
 		// Use type assertion to check if it has GetStatus method with correct return type
-		if bm, ok := s.bridgeManager.(interface{ GetStatus() map[string]bridge.BridgeStatus }); ok {
+		if bm, ok := s.bridgeManager.(interface {
+			GetStatus() map[string]bridge.BridgeStatus
+		}); ok {
 			// Run GetStatus with a short timeout to avoid blocking the HTTP handler
 			type result struct {
 				status map[string]bridge.BridgeStatus
@@ -583,7 +588,7 @@ func (s *Server) handleBridges(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	
+
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"bridges": bridges,
 	}); err != nil {
@@ -612,7 +617,7 @@ func (s *Server) handleCurrentTalker(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	
+
 	// No regular repeater talking, check for bridge talkers
 	if s.reflector != nil {
 		if refl, ok := s.reflector.(interface{ GetCurrentBridgeTalker() interface{} }); ok {
@@ -639,7 +644,7 @@ func (s *Server) handleCurrentTalker(w http.ResponseWriter, r *http.Request) {
 						response := map[string]interface{}{
 							"current_talker": map[string]interface{}{
 								"callsign":      bt.GetCallsign(),
-								"address":       bt.GetBridgeName(), // Show bridge name as "address" 
+								"address":       bt.GetBridgeName(), // Show bridge name as "address"
 								"type":          "bridge",
 								"is_talking":    true,
 								"talk_duration": int(bt.GetTalkDuration().Seconds()),
@@ -657,7 +662,7 @@ func (s *Server) handleCurrentTalker(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	
+
 	// No one is talking
 	response := map[string]interface{}{
 		"current_talker": nil,
@@ -827,6 +832,54 @@ func (s *Server) handleGetLoggingConfig(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleUpdateLoggingConfig(w http.ResponseWriter, r *http.Request) {
 	// This would update the logging configuration
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "not implemented"}); err != nil {
+		s.logger.Error("failed to encode JSON response", logger.Error(err))
+	}
+}
+
+// YSF2DMR handlers
+func (s *Server) handleYSF2DMRStatus(w http.ResponseWriter, r *http.Request) {
+	// Check if YSF2DMR bridge is available
+	if s.reflector == nil {
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"enabled": false,
+			"status":  nil,
+		}); err != nil {
+			s.logger.Error("failed to encode JSON response", logger.Error(err))
+		}
+		return
+	}
+
+	// Use type assertion to check if reflector has GetYSF2DMRBridge method
+	if refl, ok := s.reflector.(interface{ GetYSF2DMRBridge() interface{} }); ok {
+		bridge := refl.GetYSF2DMRBridge()
+		if bridge == nil {
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
+				"enabled": false,
+				"status":  nil,
+			}); err != nil {
+				s.logger.Error("failed to encode JSON response", logger.Error(err))
+			}
+			return
+		}
+
+		// Use type assertion to get status from bridge
+		if b, ok := bridge.(interface{ GetStatus() interface{} }); ok {
+			status := b.GetStatus()
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
+				"enabled": true,
+				"status":  status,
+			}); err != nil {
+				s.logger.Error("failed to encode JSON response", logger.Error(err))
+			}
+			return
+		}
+	}
+
+	// Fallback if type assertions fail
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
+		"enabled": false,
+		"status":  nil,
+	}); err != nil {
 		s.logger.Error("failed to encode JSON response", logger.Error(err))
 	}
 }

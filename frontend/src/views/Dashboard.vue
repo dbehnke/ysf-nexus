@@ -223,8 +223,15 @@
                 <div class="flex items-center space-x-3">
                   <div class="status-online"></div>
                   <div>
-                    <p class="font-medium text-gray-900 dark:text-white">{{ bridge.name }}</p>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Connected</p>
+                    <div class="flex items-center space-x-2">
+                      <p class="font-medium text-gray-900 dark:text-white">{{ bridge.name }}</p>
+                      <span :class="getBridgeTypeBadge(bridge.type)" class="badge text-xs">
+                        {{ bridge.type === 'dmr' ? 'DMR' : 'YSF' }}
+                      </span>
+                    </div>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                      {{ getBridgeConnectionInfo(bridge) }}
+                    </p>
                   </div>
                 </div>
                 <span class="badge-success">Active</span>
@@ -408,6 +415,19 @@ export default {
       }
     }
 
+    const getBridgeTypeBadge = (type) => {
+      return type === 'dmr' ? 'badge-success' : 'badge-primary'
+    }
+
+    const getBridgeConnectionInfo = (bridge) => {
+      if (bridge.type === 'dmr' && bridge.metadata) {
+        const network = bridge.metadata.dmr_network || 'DMR'
+        const tg = bridge.metadata.talk_group || '?'
+        return `${network} TG${tg}`
+      }
+      return 'Connected'
+    }
+
     const refreshData = () => {
       store.fetchStats()
       store.fetchRepeaters()
@@ -482,7 +502,9 @@ export default {
       formatTalkDuration,
       formatTimeAgo,
       refreshData,
-      getBridgeEndCountdown
+      getBridgeEndCountdown,
+      getBridgeTypeBadge,
+      getBridgeConnectionInfo
     }
   }
 }

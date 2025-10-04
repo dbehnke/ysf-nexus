@@ -27,13 +27,13 @@ const (
 
 // Packet represents a YSF network packet
 type Packet struct {
-	Type        string
-	Data        []byte
-	Source      *net.UDPAddr
-	Timestamp   time.Time
-	Callsign    string // Gateway/repeater callsign (bytes 4-14)
-	SourceCS    string // Source callsign for data packets (bytes 14-24)
-	DestCS      string // Destination callsign for data packets (bytes 24-34)
+	Type      string
+	Data      []byte
+	Source    *net.UDPAddr
+	Timestamp time.Time
+	Callsign  string // Gateway/repeater callsign (bytes 4-14)
+	SourceCS  string // Source callsign for data packets (bytes 14-24)
+	DestCS    string // Destination callsign for data packets (bytes 24-34)
 }
 
 // YSFHeader represents the common YSF packet header

@@ -17,6 +17,7 @@ type Config struct {
 	Blocklist BlocklistConfig `mapstructure:"blocklist"`
 	Logging   LoggingConfig   `mapstructure:"logging"`
 	Metrics   MetricsConfig   `mapstructure:"metrics"`
+	YSF2DMR   YSF2DMRConfig   `mapstructure:"ysf2dmr"`
 }
 
 // ServerConfig holds YSF server configuration
@@ -47,15 +48,47 @@ type WebConfig struct {
 // BridgeConfig holds bridge connection configuration
 type BridgeConfig struct {
 	Name        string        `mapstructure:"name"`
-	Host        string        `mapstructure:"host"`
-	Port        int           `mapstructure:"port"`
-	Schedule    string        `mapstructure:"schedule"`
-	Duration    time.Duration `mapstructure:"duration"`
+	Type        string        `mapstructure:"type"` // Bridge type: "ysf" or "dmr" (default: "ysf")
 	Enabled     bool          `mapstructure:"enabled"`
-	Permanent   bool          `mapstructure:"permanent"`     // If true, ignore schedule and stay connected always
-	MaxRetries  int           `mapstructure:"max_retries"`   // Max reconnection attempts (0 = infinite)
-	RetryDelay  time.Duration `mapstructure:"retry_delay"`   // Initial retry delay for exponential backoff
-	HealthCheck time.Duration `mapstructure:"health_check"`  // How often to check connection health
+	Schedule    string        `mapstructure:"schedule"`     // Cron schedule (empty for permanent)
+	Duration    time.Duration `mapstructure:"duration"`     // Duration for scheduled bridges
+	Permanent   bool          `mapstructure:"permanent"`    // If true, ignore schedule and stay connected always
+	MaxRetries  int           `mapstructure:"max_retries"`  // Max reconnection attempts (0 = infinite)
+	RetryDelay  time.Duration `mapstructure:"retry_delay"`  // Initial retry delay for exponential backoff
+	HealthCheck time.Duration `mapstructure:"health_check"` // How often to check connection health
+
+	// YSF bridge fields (used when type="ysf")
+	Host string `mapstructure:"host"` // Remote YSF reflector host
+	Port int    `mapstructure:"port"` // Remote YSF reflector port
+
+	// DMR bridge fields (used when type="dmr")
+	DMR *DMRBridgeConfig `mapstructure:"dmr"` // DMR-specific configuration
+}
+
+// DMRBridgeConfig holds DMR-specific bridge configuration
+type DMRBridgeConfig struct {
+	// Optional callsign to send in RPTC (if empty, bridge name is used by adapter)
+	Callsign          string        `mapstructure:"callsign"`
+	ID                uint32        `mapstructure:"id"`                  // DMR ID
+	Network           string        `mapstructure:"network"`             // Network name (for display)
+	Address           string        `mapstructure:"address"`             // DMR network server address
+	Port              int           `mapstructure:"port"`                // DMR network port
+	Password          string        `mapstructure:"password"`            // Network password
+	TalkGroup         uint32        `mapstructure:"talk_group"`          // Talk group to bridge
+	Slot              uint8         `mapstructure:"slot"`                // DMR slot (1 or 2)
+	ColorCode         uint8         `mapstructure:"color_code"`          // Color code
+	EnablePrivateCall bool          `mapstructure:"enable_private_call"` // Enable private calls
+	RXFreq            uint32        `mapstructure:"rx_freq"`             // RX frequency in Hz
+	TXFreq            uint32        `mapstructure:"tx_freq"`             // TX frequency in Hz
+	TXPower           uint8         `mapstructure:"tx_power"`            // TX power level in dBm (00-99)
+	Latitude          float32       `mapstructure:"latitude"`            // Latitude
+	Longitude         float32       `mapstructure:"longitude"`           // Longitude
+	Height            int32         `mapstructure:"height"`              // Height above ground
+	Location          string        `mapstructure:"location"`            // Location description
+	Description       string        `mapstructure:"description"`         // Description
+	URL               string        `mapstructure:"url"`                 // URL
+	PingInterval      time.Duration `mapstructure:"ping_interval"`       // Keep-alive interval
+	AuthTimeout       time.Duration `mapstructure:"auth_timeout"`        // Auth timeout
 }
 
 // MQTTConfig holds MQTT client configuration
@@ -99,6 +132,68 @@ type PrometheusConfig struct {
 	Path    string `mapstructure:"path"`
 }
 
+// YSF2DMRConfig holds YSF2DMR bridge configuration
+type YSF2DMRConfig struct {
+	Enabled bool             `mapstructure:"enabled"`
+	YSF     YSF2DMRYSFConfig `mapstructure:"ysf"`
+	DMR     YSF2DMRDMRConfig `mapstructure:"dmr"`
+	Lookup  DMRLookupConfig  `mapstructure:"lookup"`
+	Audio   AudioConfig      `mapstructure:"audio"`
+}
+
+// YSF2DMRYSFConfig holds YSF-side configuration for YSF2DMR
+type YSF2DMRYSFConfig struct {
+	Callsign     string        `mapstructure:"callsign"`
+	Suffix       string        `mapstructure:"suffix"`
+	LocalAddress string        `mapstructure:"local_address"`
+	LocalPort    int           `mapstructure:"local_port"`
+	EnableWiresX bool          `mapstructure:"enable_wiresx"`
+	HangTime     time.Duration `mapstructure:"hang_time"`
+}
+
+// YSF2DMRDMRConfig holds DMR network configuration for YSF2DMR
+type YSF2DMRDMRConfig struct {
+	// Optional callsign to send in RPTC (if empty, ysf.callsign or adapter-provided value is used)
+	Callsign          string        `mapstructure:"callsign"`
+	Enabled           bool          `mapstructure:"enabled"`
+	ID                uint32        `mapstructure:"id"`
+	Network           string        `mapstructure:"network"`
+	Address           string        `mapstructure:"address"`
+	Port              int           `mapstructure:"port"`
+	Password          string        `mapstructure:"password"`
+	StartupTG         uint32        `mapstructure:"startup_tg"`
+	Slot              uint8         `mapstructure:"slot"`
+	ColorCode         uint8         `mapstructure:"color_code"`
+	EnablePrivateCall bool          `mapstructure:"enable_private_call"`
+	RXFreq            uint32        `mapstructure:"rx_freq"`
+	TXFreq            uint32        `mapstructure:"tx_freq"`
+	TXPower           uint8         `mapstructure:"tx_power"`
+	Latitude          float32       `mapstructure:"latitude"`
+	Longitude         float32       `mapstructure:"longitude"`
+	Height            int32         `mapstructure:"height"`
+	Location          string        `mapstructure:"location"`
+	Description       string        `mapstructure:"description"`
+	URL               string        `mapstructure:"url"`
+	PingInterval      time.Duration `mapstructure:"ping_interval"`
+	AuthTimeout       time.Duration `mapstructure:"auth_timeout"`
+}
+
+// DMRLookupConfig holds DMR ID lookup configuration
+type DMRLookupConfig struct {
+	Enabled         bool          `mapstructure:"enabled"`
+	DMRIDFile       string        `mapstructure:"dmr_id_file"`
+	AutoDownload    bool          `mapstructure:"auto_download"`
+	DownloadURL     string        `mapstructure:"download_url"`
+	RefreshInterval time.Duration `mapstructure:"refresh_interval"`
+}
+
+// AudioConfig holds audio conversion configuration
+type AudioConfig struct {
+	Gain         float32 `mapstructure:"gain"`
+	VOXEnabled   bool    `mapstructure:"vox_enabled"`
+	VOXThreshold float32 `mapstructure:"vox_threshold"`
+}
+
 // Load loads configuration from file and environment variables
 func Load(configFile string) (*Config, error) {
 	// Set defaults
@@ -140,6 +235,9 @@ func Load(configFile string) (*Config, error) {
 	if err := validate(&config); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
+
+	// Populate DMR passwords from environment variables if not set in file
+	populateDMRPasswordsFromEnv(&config)
 
 	return &config, nil
 }
@@ -187,8 +285,77 @@ func setDefaults() {
 	viper.SetDefault("metrics.prometheus.path", "/metrics")
 
 	// Bridge defaults
+	viper.SetDefault("bridges.type", "ysf") // Default to YSF bridge type
 	viper.SetDefault("bridges.permanent", false)
 	viper.SetDefault("bridges.max_retries", 0)      // 0 = infinite retries
 	viper.SetDefault("bridges.retry_delay", "30s")  // Start with 30 second delay
 	viper.SetDefault("bridges.health_check", "60s") // Check connection every minute
+
+	// YSF2DMR defaults
+	viper.SetDefault("ysf2dmr.enabled", false)
+	viper.SetDefault("ysf2dmr.ysf.callsign", "YSF2DMR")
+	viper.SetDefault("ysf2dmr.ysf.local_address", "0.0.0.0")
+	viper.SetDefault("ysf2dmr.ysf.local_port", 42001)
+	viper.SetDefault("ysf2dmr.ysf.enable_wiresx", false)
+	viper.SetDefault("ysf2dmr.ysf.hang_time", "5s")
+	viper.SetDefault("ysf2dmr.dmr.enabled", true)
+	viper.SetDefault("ysf2dmr.dmr.slot", 2)
+	viper.SetDefault("ysf2dmr.dmr.color_code", 1)
+	viper.SetDefault("ysf2dmr.dmr.startup_tg", 91)
+	viper.SetDefault("ysf2dmr.dmr.enable_private_call", false)
+	viper.SetDefault("ysf2dmr.dmr.ping_interval", "10s")
+	viper.SetDefault("ysf2dmr.dmr.auth_timeout", "30s")
+	viper.SetDefault("ysf2dmr.dmr.tx_power", 1)
+	viper.SetDefault("ysf2dmr.lookup.enabled", true)
+	viper.SetDefault("ysf2dmr.lookup.auto_download", false)
+	viper.SetDefault("ysf2dmr.lookup.download_url", "https://radioid.net/static/users.csv")
+	viper.SetDefault("ysf2dmr.lookup.refresh_interval", "24h")
+	viper.SetDefault("ysf2dmr.audio.gain", 1.0)
+	viper.SetDefault("ysf2dmr.audio.vox_enabled", false)
+	viper.SetDefault("ysf2dmr.audio.vox_threshold", 0.1)
+}
+
+// populateDMRPasswordsFromEnv sets DMR passwords for bridges from environment variables
+// Env var pattern: BRIDGE_<BRIDGE_NAME>_DMR_PASSWORD (bridge name uppercased, non-alnum -> _)
+// Falls back to global YSF2DMR_DMR_PASSWORD for the ysf2dmr bridge if present.
+func populateDMRPasswordsFromEnv(cfg *Config) {
+	// Global fallback for ysf2dmr
+	if cfg.YSF2DMR.DMR.Password == "" {
+		if p := os.Getenv("YSF2DMR_DMR_PASSWORD"); p != "" {
+			cfg.YSF2DMR.DMR.Password = p
+		}
+	}
+
+	for i := range cfg.Bridges {
+		b := &cfg.Bridges[i]
+
+		// Only consider DMR bridges with nil/empty password
+		if b.DMR == nil {
+			continue
+		}
+
+		if b.DMR.Password != "" {
+			continue
+		}
+
+		// Build env var name
+		name := b.Name
+		// sanitize: replace non-alnum with underscore and uppercase
+		sanitized := make([]rune, 0, len(name))
+		for _, r := range name {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+				if r >= 'a' && r <= 'z' {
+					r = r - 'a' + 'A'
+				}
+				sanitized = append(sanitized, r)
+			} else {
+				sanitized = append(sanitized, '_')
+			}
+		}
+
+		envName := "BRIDGE_" + string(sanitized) + "_DMR_PASSWORD"
+		if p := os.Getenv(envName); p != "" {
+			b.DMR.Password = p
+		}
+	}
 }
