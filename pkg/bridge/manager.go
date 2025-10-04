@@ -18,6 +18,7 @@ type Manager struct {
 	logger *logger.Logger
 	server NetworkServer
 	cron   *cron.Cron
+	clock  Clock
 
 	// Bridge tracking
 	mu      sync.RWMutex
@@ -47,7 +48,6 @@ type ScheduleInfo struct {
 // BridgeStats tracks overall bridge statistics
 type BridgeStats struct {
 	ActiveBridges    int
-	ScheduledBridges int
 	FailedBridges    int
 	TotalConnections uint64
 	MissedSchedules  int
@@ -82,6 +82,11 @@ type BridgeStatus struct {
 
 // NewManager creates a new bridge manager
 func NewManager(config []config.BridgeConfig, server NetworkServer, logger *logger.Logger) *Manager {
+	return NewManagerWithClock(config, server, logger, &RealClock{})
+}
+
+// NewManagerWithClock creates a new bridge manager with an injected Clock (for testing)
+func NewManagerWithClock(config []config.BridgeConfig, server NetworkServer, logger *logger.Logger, clock Clock) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Manager{
@@ -93,6 +98,7 @@ func NewManager(config []config.BridgeConfig, server NetworkServer, logger *logg
 		schedules: make(map[string]*ScheduleInfo),
 		ctx:       ctx,
 		cancel:    cancel,
+		clock:     clock,
 	}
 }
 
@@ -191,7 +197,7 @@ func (m *Manager) setupScheduleTracking(config config.BridgeConfig) {
 		return
 	}
 
-	now := time.Now()
+	now := m.clock.Now()
 	nextRun := schedule.Next(now)
 
 	m.mu.Lock()
@@ -224,38 +230,26 @@ func (m *Manager) shouldStartNowWithDuration(config config.BridgeConfig) (bool, 
 		return false, 0
 	}
 
-	now := time.Now()
+	now := m.clock.Now()
 
-	// Look back to see if we missed a recent schedule
-	// Check the last 2 hours for potential missed schedules
-	checkFrom := now.Add(-2 * time.Hour)
+	lastScheduled := m.findLastScheduledOccurrence(schedule, now, config.Duration)
 
-	// Find the most recent scheduled time before now
-	lastScheduled := schedule.Next(checkFrom)
-	for {
-		nextScheduled := schedule.Next(lastScheduled)
-		if nextScheduled.After(now) {
-			break
-		}
-		lastScheduled = nextScheduled
+	// If we didn't find an occurrence (odd schedule), abort
+	if lastScheduled.IsZero() {
+		return false, 0
 	}
 
-	// Check if we're within the duration window of the last scheduled time
-	if lastScheduled.Before(now) {
-		windowEnd := lastScheduled.Add(config.Duration)
-		if now.Before(windowEnd) {
-			// We're within the scheduled window, should be running
-			// Calculate remaining duration
-			remainingDuration := windowEnd.Sub(now)
-
-			m.logger.Info("Detected missed schedule within window",
-				logger.String("name", config.Name),
-				logger.Any("scheduled_at", lastScheduled),
-				logger.Any("window_ends", windowEnd),
-				logger.Any("now", now),
-				logger.Duration("remaining_duration", remainingDuration))
-			return true, remainingDuration
-		}
+	// Compute scheduled window end and remaining duration
+	windowEnd := lastScheduled.Add(config.Duration)
+	if now.Before(windowEnd) {
+		remainingDuration := windowEnd.Sub(now)
+		m.logger.Info("Detected missed schedule within window",
+			logger.String("name", config.Name),
+			logger.Any("scheduled_at", lastScheduled),
+			logger.Any("window_ends", windowEnd),
+			logger.Any("now", now),
+			logger.Duration("remaining_duration", remainingDuration))
+		return true, remainingDuration
 	}
 
 	return false, 0
@@ -300,7 +294,7 @@ func (m *Manager) updateScheduleExecution(name string) {
 	defer m.mu.Unlock()
 
 	if schedInfo, exists := m.schedules[name]; exists {
-		now := time.Now()
+		now := m.clock.Now()
 		schedInfo.LastExecution = &now
 
 		// Calculate next execution time
@@ -358,7 +352,7 @@ func (m *Manager) shouldRecoverScheduleWithDuration(schedInfo *ScheduleInfo) (bo
 		return false, 0
 	}
 
-	now := time.Now()
+	now := m.clock.Now()
 
 	// If we have a last execution time, use it as reference
 	checkFrom := now.Add(-1 * time.Hour) // Default to 1 hour back
@@ -367,14 +361,7 @@ func (m *Manager) shouldRecoverScheduleWithDuration(schedInfo *ScheduleInfo) (bo
 	}
 
 	// Find the most recent scheduled time that we might have missed
-	lastScheduled := schedule.Next(checkFrom)
-	for {
-		nextScheduled := schedule.Next(lastScheduled)
-		if nextScheduled.After(now) {
-			break
-		}
-		lastScheduled = nextScheduled
-	}
+	lastScheduled := m.findLastScheduledOccurrence(schedule, now, schedInfo.Duration)
 
 	// Check if we're within the duration window of a missed schedule
 	if lastScheduled.After(checkFrom) && lastScheduled.Before(now) {
@@ -398,6 +385,35 @@ func (m *Manager) shouldRecoverScheduleWithDuration(schedInfo *ScheduleInfo) (bo
 	}
 
 	return false, 0
+}
+
+// findLastScheduledOccurrence finds the most recent scheduled occurrence <= now
+// by iterating from a start time calculated from now and duration. It returns
+// the zero Time if no occurrence was found.
+func (m *Manager) findLastScheduledOccurrence(schedule cron.Schedule, now time.Time, duration time.Duration) time.Time {
+	// Look back slightly more than the duration to ensure we capture the start
+	// of any window that might still be active.
+	lookback := duration + 1*time.Second
+	if lookback <= 0 {
+		lookback = 1 * time.Second
+	}
+
+	start := now.Add(-lookback)
+	candidate := schedule.Next(start)
+	var lastScheduled time.Time
+	const maxIterations = 1024
+	for i := 0; i < maxIterations; i++ {
+		if candidate.IsZero() {
+			break
+		}
+		if candidate.After(now) {
+			break
+		}
+		lastScheduled = candidate
+		candidate = schedule.Next(candidate)
+	}
+
+	return lastScheduled
 }
 
 // shouldBeActive was removed because it was unused; schedule checking is handled
