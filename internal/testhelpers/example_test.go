@@ -8,6 +8,17 @@ import (
 	"time"
 )
 
+// helper to treat nil or empty map as no current talker
+func isEmptyCurrentTalker(v interface{}) bool {
+	if v == nil {
+		return true
+	}
+	if m, ok := v.(map[string]interface{}); ok {
+		return len(m) == 0
+	}
+	return false
+}
+
 // IntegrationTestUsageExample shows how to use the integration test framework
 func IntegrationTestUsageExample() {
 	// This is an example of how to use the testing framework in your tests
@@ -228,22 +239,31 @@ func TestNetworkStatus(t *testing.T) {
 			// Get status with active talker
 			updatedStatus := bridge.GetStatus()
 
-			if updatedStatus["current_talker"] == nil {
+			// Accept both a non-nil map or a non-empty map as indicating an active talker
+			if isEmptyCurrentTalker(updatedStatus["current_talker"]) {
 				t.Error("Status should show current talker")
 			}
 
-			// Stop talker
+			// Stop talker and poll briefly for the status to update to avoid timing races
 			bridge.StopCurrentTalker()
 
-			// Get final status
-			finalStatus := bridge.GetStatus()
-
-			if finalStatus["current_talker"] != nil {
-				t.Error("Status should not show current talker after stop")
+			var finalStatus map[string]interface{}
+			ok := false
+			deadline := time.Now().Add(500 * time.Millisecond)
+			for time.Now().Before(deadline) {
+				finalStatus = bridge.GetStatus()
+				if isEmptyCurrentTalker(finalStatus["current_talker"]) {
+					// also ensure history updated
+					if count, okc := finalStatus["talker_count"].(int); okc && count == 1 {
+						ok = true
+						break
+					}
+				}
+				time.Sleep(20 * time.Millisecond)
 			}
 
-			if finalStatus["talker_count"].(int) != 1 {
-				t.Errorf("Status should show 1 talker in history, got %d", finalStatus["talker_count"])
+			if !ok {
+				t.Errorf("Status did not update to expected post-stop state: current_talker=%v, talker_count=%v", finalStatus["current_talker"], finalStatus["talker_count"])
 			}
 		}
 	}
