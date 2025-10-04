@@ -81,6 +81,12 @@ func (b *Bridge) RunPermanent(ctx context.Context) {
 				b.logger.Error("Failed to connect permanent bridge", logger.Error(err))
 				b.handleConnectionFailure()
 
+				// If we've exceeded max retries (and maxRetries > 0), stop retrying and return.
+				if b.maxRetries > 0 && b.retryCount >= b.maxRetries {
+					b.logger.Error("Max retries exceeded - giving up on permanent bridge", logger.Int("retries", b.retryCount))
+					return
+				}
+
 				// Wait before retry with exponential backoff
 				delay := b.calculateRetryDelay()
 				b.logger.Info("Retrying permanent bridge connection",
@@ -149,7 +155,9 @@ func (b *Bridge) RunScheduled(ctx context.Context, duration time.Duration) {
 				// Connected successfully, reset retry count and maintain connection
 				b.retryCount = 0
 				b.maintainConnection(scheduleCtx)
-				return // Connection ended naturally
+				// Connection ended (dropped or stopped) — continue attempting to reconnect
+				// until the scheduled window (scheduleCtx) expires.
+				continue
 			}
 		}
 	}
@@ -374,12 +382,6 @@ func (b *Bridge) sendPing() error {
 	// Create YSF ping packet for health checking
 	ping := b.createPingPacket()
 	return b.sendPacket(ping)
-}
-
-func (b *Bridge) sendDisconnect() error {
-	// Create YSF disconnect packet
-	disconnect := b.createDisconnectPacket()
-	return b.sendPacket(disconnect)
 }
 
 func (b *Bridge) sendDisconnectLocked() error {
