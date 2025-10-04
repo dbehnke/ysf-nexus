@@ -3,19 +3,23 @@ package bridge
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
 	"github.com/dbehnke/ysf-nexus/pkg/config"
 	"github.com/dbehnke/ysf-nexus/pkg/logger"
+	"github.com/dbehnke/ysf-nexus/pkg/network"
 	"github.com/dbehnke/ysf-nexus/pkg/ysf2dmr"
 )
 
 // DMRBridgeAdapter adapts ysf2dmr.Bridge to work with the bridge manager
 type DMRBridgeAdapter struct {
-	config config.BridgeConfig
-	logger *logger.Logger
-	bridge *ysf2dmr.Bridge
+	config               config.BridgeConfig
+	logger               *logger.Logger
+	bridge               *ysf2dmr.Bridge
+	server               *network.Server
+	repeaterAddrProvider func() []*net.UDPAddr
 
 	// Connection state
 	mu             sync.RWMutex
@@ -30,7 +34,10 @@ type DMRBridgeAdapter struct {
 }
 
 // NewDMRBridgeAdapter creates a new DMR bridge adapter
-func NewDMRBridgeAdapter(cfg config.BridgeConfig, logger *logger.Logger) (*DMRBridgeAdapter, error) {
+// NewDMRBridgeAdapter creates a new DMR bridge adapter. server and repeaterAddrProvider
+// are optional; if provided the underlying ysf2dmr bridge will be constructed with
+// the shared server so converted packets can be broadcast.
+func NewDMRBridgeAdapter(cfg config.BridgeConfig, logger *logger.Logger, server *network.Server, repeaterAddrProvider func() []*net.UDPAddr) (*DMRBridgeAdapter, error) {
 	if cfg.DMR == nil {
 		return nil, fmt.Errorf("DMR configuration is required for DMR bridge")
 	}
@@ -38,8 +45,14 @@ func NewDMRBridgeAdapter(cfg config.BridgeConfig, logger *logger.Logger) (*DMRBr
 	// Convert BridgeConfig to YSF2DMRConfig
 	ysf2dmrConfig := convertToYSF2DMRConfig(cfg)
 
-	// Create the underlying ysf2dmr bridge
-	ysf2dmrBridge, err := ysf2dmr.NewBridge(ysf2dmrConfig, logger)
+	// Create the underlying ysf2dmr bridge; prefer constructor with server/provider when available
+	var ysf2dmrBridge *ysf2dmr.Bridge
+	var err error
+	if server != nil && repeaterAddrProvider != nil {
+		ysf2dmrBridge, err = ysf2dmr.NewBridgeWithServer(ysf2dmrConfig, logger, server, repeaterAddrProvider)
+	} else {
+		ysf2dmrBridge, err = ysf2dmr.NewBridge(ysf2dmrConfig, logger)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ysf2dmr bridge: %w", err)
 	}
@@ -51,18 +64,26 @@ func NewDMRBridgeAdapter(cfg config.BridgeConfig, logger *logger.Logger) (*DMRBr
 	}
 
 	return &DMRBridgeAdapter{
-		config:         cfg,
-		logger:         logger,
-		bridge:         ysf2dmrBridge,
-		state:          StateDisconnected,
-		maxRetries:     maxRetries,
-		baseRetryDelay: retryDelay,
+		config:               cfg,
+		logger:               logger,
+		bridge:               ysf2dmrBridge,
+		server:               server,
+		repeaterAddrProvider: repeaterAddrProvider,
+		state:                StateDisconnected,
+		maxRetries:           maxRetries,
+		baseRetryDelay:       retryDelay,
 	}, nil
 }
 
 // convertToYSF2DMRConfig converts BridgeConfig with DMR settings to YSF2DMRConfig
 func convertToYSF2DMRConfig(cfg config.BridgeConfig) config.YSF2DMRConfig {
 	dmr := cfg.DMR
+
+	// Determine which callsign to use for DMR: prefer explicit DMR.callsign, fall back to bridge name
+	callsign := cfg.Name
+	if dmr.Callsign != "" {
+		callsign = dmr.Callsign
+	}
 
 	return config.YSF2DMRConfig{
 		Enabled: true,
@@ -74,6 +95,7 @@ func convertToYSF2DMRConfig(cfg config.BridgeConfig) config.YSF2DMRConfig {
 		},
 		DMR: config.YSF2DMRDMRConfig{
 			Enabled:           true,
+			Callsign:          callsign,
 			ID:                dmr.ID,
 			Network:           dmr.Network,
 			Address:           dmr.Address,
@@ -177,11 +199,14 @@ func (a *DMRBridgeAdapter) connect(ctx context.Context) error {
 	a.setState(StateConnecting)
 
 	// Start the ysf2dmr bridge
+	a.logger.Info("DMR adapter invoking ysf2dmr.Bridge.Start", logger.String("name", a.config.Name))
 	if err := a.bridge.Start(ctx); err != nil {
+		a.logger.Error("ysf2dmr.Bridge.Start returned error", logger.Error(err), logger.String("name", a.config.Name))
 		a.setLastError(err.Error())
 		a.setState(StateFailed)
 		return err
 	}
+	a.logger.Info("ysf2dmr.Bridge.Start completed successfully", logger.String("name", a.config.Name))
 
 	now := time.Now()
 	a.mu.Lock()
@@ -349,4 +374,32 @@ func (a *DMRBridgeAdapter) calculateRetryDelay() time.Duration {
 		delay = 5 * time.Minute
 	}
 	return delay
+}
+
+// InjectYSFPacket forwards a YSF packet to the underlying YSF2DMR bridge for conversion
+// This allows the reflector to forward local repeater traffic to the DMR network
+func (a *DMRBridgeAdapter) InjectYSFPacket(packet *network.Packet) error {
+	// Only process if connected
+	if !a.IsConnected() {
+		return nil // Silently ignore if not connected
+	}
+
+	// Forward packet to the underlying ysf2dmr bridge for processing
+	if a.bridge != nil {
+		a.logger.Debug("Forwarding YSF packet to DMR bridge",
+			logger.String("bridge", a.config.Name),
+			logger.String("gateway", packet.Callsign),
+			logger.String("source_cs", packet.SourceCS),
+			logger.Int("size", len(packet.Data)))
+
+		// The ysf2dmr bridge has a handler that processes YSFD packets
+		// We need to call it directly since we're bypassing the shared server's
+		// normal packet routing (the reflector handles packets before bridges see them)
+		// This is a package-internal call to avoid reflection - we'll need to expose
+		// the handler as a public method or use an internal method
+		// For now, we'll use the bridge's handleYSFPacket directly (need to export it)
+		return a.bridge.HandleYSFPacket(packet)
+	}
+
+	return nil
 }

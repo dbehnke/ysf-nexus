@@ -10,13 +10,17 @@ import (
 // Packet types for DMR network protocol
 const (
 	// Authentication packets
-	PacketTypeRPTL = "RPTL" // Login request
-	PacketTypeRPTK = "RPTK" // Password/key response
-	PacketTypeRPTC = "RPTC" // Configuration
-	PacketTypeRPTA = "RPTA" // ACK from server
-	PacketTypeMSTN = "MSTN" // Server NAK
-	PacketTypeMSTP = "MSTP" // Ping from server
-	PacketTypeMSTC = "MSTC" // Server closing
+	PacketTypeRPTL   = "RPTL"   // Login request
+	PacketTypeRPTK   = "RPTK"   // Password/key response
+	PacketTypeRPTC   = "RPTC"   // Configuration
+	PacketTypeRPTA   = "RPTA"   // ACK from server (legacy)
+	PacketTypeRPTACK = "RPTACK" // ACK from server (modern/TGIF)
+	PacketTypeMSTAK  = "MSTAK"  // Server ACK (after RPTL)
+	PacketTypeMSTNAK = "MSTNAK" // Server NAK (authentication reject)
+	PacketTypeMSTP   = "MSTP"   // Ping from server (MSTPING)
+	PacketTypeRPTP   = "RPTP"   // Pong response to server (RPTPONG)
+	PacketTypeMSTC   = "MSTC"   // Server closing
+	PacketTypeMSTN   = "MSTN"   // Alias for MSTNAK
 
 	// Voice/Data packets
 	PacketTypeDMRD = "DMRD" // DMR data (voice/data)
@@ -69,18 +73,40 @@ func (p *RPTLPacket) Serialize() []byte {
 // RPTKPacket represents a repeater key/password packet
 type RPTKPacket struct {
 	RepeaterID uint32
-	Hash       [32]byte // SHA256 hash
+	Hash       [32]byte // Full SHA256 hash (server validates first 4 bytes)
 }
 
 // NewRPTKPacket creates a new password packet with hashed credentials
+// Hash format: Full SHA256(salt + password) - 32 bytes
+// MMDVMHost reference: DMRDirectNetwork.cpp writeAuthorisation()
+// Server validates first 4 bytes as uint32 but expects full 32-byte hash in packet
 func NewRPTKPacket(repeaterID uint32, password string, salt []byte) *RPTKPacket {
-	// Create hash: SHA256(password + salt)
+	// Create hash: SHA256(salt + password)
 	hasher := sha256.New()
-	hasher.Write([]byte(password))
 	hasher.Write(salt)
+	hasher.Write([]byte(password))
+	fullHash := hasher.Sum(nil)
 
 	var hash [32]byte
-	copy(hash[:], hasher.Sum(nil))
+	copy(hash[:], fullHash)
+
+	return &RPTKPacket{
+		RepeaterID: repeaterID,
+		Hash:       hash,
+	}
+}
+
+// NewRPTKPacketBytes creates a new password packet with hashed credentials from password bytes
+// This version accepts pre-processed password bytes (e.g., hex-decoded)
+func NewRPTKPacketBytes(repeaterID uint32, passwordBytes []byte, salt []byte) *RPTKPacket {
+	// Create hash: SHA256(salt + passwordBytes)
+	hasher := sha256.New()
+	hasher.Write(salt)
+	hasher.Write(passwordBytes)
+	fullHash := hasher.Sum(nil)
+
+	var hash [32]byte
+	copy(hash[:], fullHash)
 
 	return &RPTKPacket{
 		RepeaterID: repeaterID,
@@ -89,6 +115,8 @@ func NewRPTKPacket(repeaterID uint32, password string, salt []byte) *RPTKPacket 
 }
 
 // Serialize converts the key packet to bytes
+// Format: RPTK (4 bytes) + RepeaterID (4 bytes) + Hash (32 bytes) = 40 bytes total
+// Matches MMDVMHost DMRDirectNetwork.cpp writeAuthorisation()
 func (p *RPTKPacket) Serialize() []byte {
 	packet := make([]byte, 40)
 	copy(packet[0:4], PacketTypeRPTK)
@@ -103,11 +131,11 @@ type RPTCPacket struct {
 	Callsign    string // Up to 8 characters
 	RXFreq      uint32 // In Hz
 	TXFreq      uint32 // In Hz
-	TXPower     uint32 // In watts
-	ColorCode   uint8
+	TXPower     uint8  // In dBm (00-99) - NOT watts!
+	ColorCode   uint8  // 01-15
 	Latitude    float32
 	Longitude   float32
-	Height      int32
+	Height      int32  // In meters (000-999)
 	Location    string // Up to 20 characters
 	Description string // Up to 20 characters
 	URL         string // Up to 124 characters
@@ -121,105 +149,95 @@ func NewRPTCPacket(repeaterID uint32) *RPTCPacket {
 		RepeaterID: repeaterID,
 		Callsign:   "",
 		ColorCode:  1,
-		TXPower:    1,
+		TXPower:    25, // 25 dBm = ~316 watts (typical repeater power)
 	}
 }
 
 // Serialize converts the configuration packet to bytes
+// Format per DMRHub implementation: internal/db/models/repeater_configuration.go
 func (p *RPTCPacket) Serialize() []byte {
 	packet := make([]byte, 302)
 
-	// Packet type
+	// Signature (4 bytes ASCII)
 	copy(packet[0:4], PacketTypeRPTC)
 
-	// Repeater ID
+	// Repeater ID (4 bytes binary) - offset 4
 	binary.BigEndian.PutUint32(packet[4:8], p.RepeaterID)
 
-	// Callsign (8 bytes, space-padded)
-	callsign := fmt.Sprintf("%-8s", p.Callsign)
-	if len(callsign) > 8 {
-		callsign = callsign[:8]
+	// Callsign (8 bytes ASCII, left-aligned) - offset 8
+	copy(packet[8:16], fmt.Sprintf("%-8.8s", p.Callsign))
+
+	// RX Frequency (9 ASCII digits, zero-padded)
+	copy(packet[16:25], fmt.Sprintf("%09d", p.RXFreq))
+
+	// TX Frequency (9 ASCII digits, zero-padded)
+	copy(packet[25:34], fmt.Sprintf("%09d", p.TXFreq))
+
+	// TX Power (2 ASCII digits, zero-padded)
+	copy(packet[34:36], fmt.Sprintf("%02d", p.TXPower))
+
+	// Color Code (2 ASCII digits, zero-padded)
+	copy(packet[36:38], fmt.Sprintf("%02d", p.ColorCode))
+
+	// Latitude (8 chars ASCII) - matches MMDVMHost format: sprintf("%08f") then truncate to 8 chars
+	// Example: 85.000000 → 85.00000 (8 chars)
+	latStr := fmt.Sprintf("%08f", p.Latitude)
+	if len(latStr) > 8 {
+		latStr = latStr[:8]
 	}
-	copy(packet[8:16], callsign)
+	copy(packet[38:46], fmt.Sprintf("%8.8s", latStr))
 
-	// RX Frequency
-	binary.BigEndian.PutUint32(packet[16:20], p.RXFreq)
-
-	// TX Frequency
-	binary.BigEndian.PutUint32(packet[20:24], p.TXFreq)
-
-	// TX Power
-	binary.BigEndian.PutUint32(packet[24:28], p.TXPower)
-
-	// Color Code
-	packet[28] = p.ColorCode
-
-	// Latitude (float32)
-	binary.BigEndian.PutUint32(packet[29:33], floatToUint32(p.Latitude))
-
-	// Longitude (float32)
-	binary.BigEndian.PutUint32(packet[33:37], floatToUint32(p.Longitude))
-
-	// Height
-	binary.BigEndian.PutUint32(packet[37:41], uint32(p.Height))
-
-	// Location (20 bytes)
-	location := fmt.Sprintf("%-20s", p.Location)
-	if len(location) > 20 {
-		location = location[:20]
+	// Longitude (9 chars ASCII) - matches MMDVMHost format: sprintf("%09f") then truncate to 9 chars
+	// Example: -83.000000 → -83.00000 (9 chars)
+	lonStr := fmt.Sprintf("%09f", p.Longitude)
+	if len(lonStr) > 9 {
+		lonStr = lonStr[:9]
 	}
-	copy(packet[41:61], location)
+	copy(packet[46:55], fmt.Sprintf("%9.9s", lonStr))
 
-	// Description (20 bytes)
-	description := fmt.Sprintf("%-20s", p.Description)
-	if len(description) > 20 {
-		description = description[:20]
-	}
-	copy(packet[61:81], description)
+	// Height (3 ASCII digits, zero-padded)
+	copy(packet[55:58], fmt.Sprintf("%03d", p.Height))
 
-	// Slots (4 bytes - we support both slots by default)
-	packet[81] = 0x03 // Both slots enabled
+	// Location (20 chars, left-aligned) - offset 58
+	copy(packet[58:78], fmt.Sprintf("%-20.20s", p.Location))
 
-	// URL (124 bytes)
-	url := fmt.Sprintf("%-124s", p.URL)
-	if len(url) > 124 {
-		url = url[:124]
-	}
-	copy(packet[82:206], url)
+	// Description (19 chars, left-aligned) - offset 78
+	copy(packet[78:97], fmt.Sprintf("%-19.19s", p.Description))
 
-	// Software ID (40 bytes)
-	softwareID := fmt.Sprintf("%-40s", p.SoftwareID)
-	if len(softwareID) > 40 {
-		softwareID = softwareID[:40]
-	}
-	copy(packet[206:246], softwareID)
+	// Slots (1 byte ASCII) - offset 97
+	// Per MMDVMHost: '4' for simplex hotspot, '3' for duplex both slots, '1' slot 1 only, '2' slot 2 only
+	// Default to '4' (simplex hotspot) for maximum compatibility
+	packet[97] = '4'
 
-	// Package ID (40 bytes)
-	packageID := fmt.Sprintf("%-40s", p.PackageID)
-	if len(packageID) > 40 {
-		packageID = packageID[:40]
-	}
-	copy(packet[246:286], packageID)
+	// URL (124 chars, left-aligned) - offset 98
+	copy(packet[98:222], fmt.Sprintf("%-124.124s", p.URL))
+
+	// Software ID (40 chars, left-aligned)
+	copy(packet[222:262], fmt.Sprintf("%-40.40s", p.SoftwareID))
+
+	// Package ID (40 chars, left-aligned)
+	copy(packet[262:302], fmt.Sprintf("%-40.40s", p.PackageID))
 
 	return packet
 }
 
-// MSTPPacket represents a ping response packet
+// MSTPPacket represents a ping response packet (RPTPONG)
 type MSTPPacket struct {
 	RepeaterID uint32
 }
 
-// NewMSTPPacket creates a new ping response packet
+// NewMSTPPacket creates a new ping response packet (RPTPONG)
 func NewMSTPPacket(repeaterID uint32) *MSTPPacket {
 	return &MSTPPacket{
 		RepeaterID: repeaterID,
 	}
 }
 
-// Serialize converts the ping response to bytes
+// Serialize converts the ping response to bytes (RPTPONG format)
 func (p *MSTPPacket) Serialize() []byte {
+	// RPTPONG packet: "RPTPONG" (7 bytes) + RepeaterID (4 bytes) = 11 bytes
 	packet := make([]byte, 11)
-	copy(packet[0:4], PacketTypeMSTP)
+	copy(packet[0:7], "RPTPONG")
 	binary.BigEndian.PutUint32(packet[7:11], p.RepeaterID)
 	return packet
 }
@@ -306,14 +324,30 @@ func ParsePacket(data []byte) (*Packet, error) {
 }
 
 // ParseRPTAPacket parses an ACK packet from server
+// Multiple formats exist:
+// 1. RPTACK + salt (4 bytes) = 10 bytes (TGIF/modern: challenge with salt, no repeater ID echo)
+// 2. RPTA + repeater_id (4 bytes) + salt (N bytes) = 8+N bytes (legacy with salt)
+// 3. RPTA + repeater_id (4 bytes) = 8 bytes (legacy ACK only)
 func ParseRPTAPacket(data []byte) (uint32, []byte, error) {
 	if len(data) < 8 {
-		return 0, nil, fmt.Errorf("RPTA packet too short")
+		return 0, nil, fmt.Errorf("RPTA packet too short: %d bytes", len(data))
 	}
 
+	// Check if this is RPTACK format (TGIF/modern)
+	if len(data) >= 6 && string(data[0:6]) == "RPTACK" {
+		// RPTACK format: "RPTACK" (6 bytes) + salt (4 bytes) = 10 bytes
+		// TGIF doesn't echo back the repeater ID, salt starts at byte 6
+		var salt []byte
+		if len(data) > 6 {
+			salt = data[6:]
+		}
+
+		return 0, salt, nil
+	}
+
+	// Legacy RPTA format: "RPTA" (4 bytes) + repeater_id (4 bytes) + optional salt
 	repeaterID := binary.BigEndian.Uint32(data[4:8])
 
-	// Salt is everything after byte 8
 	var salt []byte
 	if len(data) > 8 {
 		salt = data[8:]

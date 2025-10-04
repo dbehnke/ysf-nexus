@@ -33,38 +33,30 @@ func TestBridgeManager_PermanentBridge(t *testing.T) {
 	mockServer := &MockNetworkServer{}
 
 	// Configure a permanent bridge
-	config := []config.BridgeConfig{
-		{
-			Name:       "test-permanent",
-			Host:       "localhost",
-			Port:       4200,
-			Enabled:    true,
-			Permanent:  true,
-			MaxRetries: 3,
-			RetryDelay: 1 * time.Second,
-		},
+	cfg := config.BridgeConfig{
+		Name:       "test-permanent",
+		Host:       "localhost",
+		Port:       4200,
+		Enabled:    true,
+		Permanent:  true,
+		MaxRetries: 3,
+		RetryDelay: 1 * time.Second,
 	}
 
-	manager := NewManager(config, mockServer, logger)
+	// Create the bridge directly so we can inject the mock server
+	bridge := NewBridge(cfg, mockServer, logger)
 
-	// Start the manager
-	err := manager.Start()
-	if err != nil {
-		t.Fatalf("Failed to start manager: %v", err)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	go bridge.RunPermanent(ctx)
 
 	// Wait a moment for the permanent bridge to start
 	time.Sleep(100 * time.Millisecond)
 
-	// Check that the bridge exists and is in connecting/connected state
-	status := manager.GetStatus()
-	bridgeStatus, exists := status["test-permanent"]
-	if !exists {
-		t.Fatalf("Expected bridge 'test-permanent' to exist")
-	}
-
-	if bridgeStatus.State != StateConnecting && bridgeStatus.State != StateConnected {
-		t.Errorf("Expected bridge to be connecting or connected, got %s", bridgeStatus.State)
+	status := bridge.GetStatus()
+	if status.State != StateConnecting && status.State != StateConnected {
+		t.Errorf("Expected bridge to be connecting or connected, got %s", status.State)
 	}
 
 	// Verify that packets were sent (handshake)
@@ -72,51 +64,42 @@ func TestBridgeManager_PermanentBridge(t *testing.T) {
 		t.Errorf("Expected at least one packet to be sent for handshake")
 	}
 
-	// Stop the manager
-	manager.Stop()
+	// Stop the bridge by cancelling context
+	cancel()
 }
 
 func TestBridgeManager_ScheduledBridge(t *testing.T) {
 	logger := logger.NewTestLogger(os.Stdout)
 	mockServer := &MockNetworkServer{}
 
-	// Configure a scheduled bridge that runs every second for 2 seconds
-	config := []config.BridgeConfig{
-		{
-			Name:     "test-scheduled",
-			Host:     "localhost",
-			Port:     4200,
-			Enabled:  true,
-			Schedule: "* * * * * *", // Every second
-			Duration: 2 * time.Second,
-		},
+	// Create a bridge configured to be scheduled every second for a short duration
+	cfg := config.BridgeConfig{
+		Name:     "test-scheduled",
+		Host:     "localhost",
+		Port:     4200,
+		Enabled:  true,
+		Schedule: "* * * * * *", // Every second
+		Duration: 2 * time.Second,
 	}
 
-	manager := NewManager(config, mockServer, logger)
+	bridge := NewBridge(cfg, mockServer, logger)
 
-	// Start the manager
-	err := manager.Start()
-	if err != nil {
-		t.Fatalf("Failed to start manager: %v", err)
-	}
+	// Run the bridge in scheduled mode by starting it in a short-lived context
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go bridge.RunScheduled(ctx, cfg.Duration)
 
 	// Wait for the schedule to trigger
 	time.Sleep(1200 * time.Millisecond)
 
-	// Check that the bridge exists
-	status := manager.GetStatus()
-	bridgeStatus, exists := status["test-scheduled"]
-	if !exists {
-		t.Fatalf("Expected bridge 'test-scheduled' to exist")
+	status := bridge.GetStatus()
+	if status.State == StateDisconnected {
+		t.Logf("Bridge state: %s (may have already completed)", status.State)
 	}
 
-	// The bridge should have been triggered by now
-	if bridgeStatus.State == StateDisconnected {
-		t.Logf("Bridge state: %s (may have already completed)", bridgeStatus.State)
-	}
-
-	// Stop the manager
-	manager.Stop()
+	// Stop by cancelling context
+	cancel()
 }
 
 func TestBridge_ConnectionRetry(t *testing.T) {

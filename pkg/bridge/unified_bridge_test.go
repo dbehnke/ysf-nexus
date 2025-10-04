@@ -81,8 +81,8 @@ func TestBridgeTypeDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := &MockSimpleServer{}
-			manager := NewManager([]config.BridgeConfig{tt.config}, server, log)
+			// pass nil server and provider for unit tests
+			manager := NewManager([]config.BridgeConfig{tt.config}, nil, log, nil)
 
 			err := manager.Start()
 			if err != nil {
@@ -160,8 +160,7 @@ func TestMixedBridgeConfiguration(t *testing.T) {
 		Format: "text",
 	})
 
-	server := &MockSimpleServer{}
-	manager := NewManager(configs, server, log)
+	manager := NewManager(configs, nil, log, nil)
 
 	err := manager.Start()
 	if err != nil {
@@ -223,8 +222,7 @@ func TestDMRBridgeMetadata(t *testing.T) {
 		Format: "text",
 	})
 
-	server := &MockSimpleServer{}
-	manager := NewManager([]config.BridgeConfig{cfg}, server, log)
+	manager := NewManager([]config.BridgeConfig{cfg}, nil, log, nil)
 
 	err := manager.Start()
 	if err != nil {
@@ -355,8 +353,7 @@ func TestScheduledBridgeConfiguration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := &MockSimpleServer{}
-			manager := NewManager([]config.BridgeConfig{tt.config}, server, log)
+			manager := NewManager([]config.BridgeConfig{tt.config}, nil, log, nil)
 
 			err := manager.Start()
 			if err != nil {
@@ -409,8 +406,7 @@ func TestBridgeRunnerInterface(t *testing.T) {
 		Enabled: true,
 	}
 
-	server := &MockSimpleServer{}
-	ysfBridge := NewBridge(ysfConfig, server, log)
+	ysfBridge := NewBridge(ysfConfig, nil, log)
 
 	// Test YSF bridge implements interface
 	var _ BridgeRunner = ysfBridge
@@ -440,7 +436,7 @@ func TestBridgeRunnerInterface(t *testing.T) {
 		},
 	}
 
-	dmrBridge, err := NewDMRBridgeAdapter(dmrConfig, log)
+	dmrBridge, err := NewDMRBridgeAdapter(dmrConfig, log, nil, nil)
 	if err != nil {
 		t.Fatalf("Failed to create DMR bridge: %v", err)
 	}
@@ -470,8 +466,7 @@ func TestInvalidBridgeType(t *testing.T) {
 		Format: "text",
 	})
 
-	server := &MockSimpleServer{}
-	manager := NewManager([]config.BridgeConfig{cfg}, server, log)
+	manager := NewManager([]config.BridgeConfig{cfg}, nil, log, nil)
 
 	err := manager.Start()
 	if err != nil {
@@ -504,8 +499,7 @@ func TestDMRBridgeWithoutConfig(t *testing.T) {
 		Format: "text",
 	})
 
-	server := &MockSimpleServer{}
-	manager := NewManager([]config.BridgeConfig{cfg}, server, log)
+	manager := NewManager([]config.BridgeConfig{cfg}, nil, log, nil)
 
 	err := manager.Start()
 	if err != nil {
@@ -539,8 +533,7 @@ func TestBridgeLifecycle(t *testing.T) {
 		Format: "text",
 	})
 
-	server := &MockSimpleServer{}
-	manager := NewManager([]config.BridgeConfig{cfg}, server, log)
+	manager := NewManager([]config.BridgeConfig{cfg}, nil, log, nil)
 
 	// Start manager
 	err := manager.Start()
@@ -637,11 +630,9 @@ func BenchmarkMixedBridgeCreation(b *testing.B) {
 		Format: "text",
 	})
 
-	server := &MockSimpleServer{}
-
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		manager := NewManager(configs, server, log)
+		manager := NewManager(configs, nil, log, nil)
 		_ = manager.Start()
 		manager.Stop()
 	}

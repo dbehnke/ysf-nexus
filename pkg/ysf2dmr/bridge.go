@@ -3,6 +3,7 @@ package ysf2dmr
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
@@ -53,10 +54,13 @@ type Bridge struct {
 	logger *logger.Logger
 
 	// Network components
-	ysfServer  *network.Server
-	dmrNetwork *dmr.Network
-	lookup     *dmr.Lookup
-	converter  *codec.Converter
+	ysfServer     *network.Server
+	ownsYSFServer bool
+	// function to obtain current repeater UDP addresses (provided by reflector)
+	repeaterAddrProvider func() []*net.UDPAddr
+	dmrNetwork           *dmr.Network
+	lookup               *dmr.Lookup
+	converter            *codec.Converter
 
 	// State management
 	mu         sync.RWMutex
@@ -80,14 +84,39 @@ type Statistics struct {
 }
 
 // NewBridge creates a new YSF2DMR bridge
-func NewBridge(cfg config.YSF2DMRConfig, log *logger.Logger) (*Bridge, error) {
+// NewBridge creates a new YSF2DMR bridge. If srv is non-nil the bridge will use
+// the provided YSF server (shared with the reflector) instead of creating its
+// own local server. Pass nil to let the bridge create and manage its own server.
+// NewBridge creates a new YSF2DMR bridge. If srv is non-nil the bridge will use
+// the provided YSF server (shared with the reflector) instead of creating its
+// own local server. Pass nil to let the bridge create and manage its own server.
+// The repeaterAddrProvider is an optional function that returns the current
+// list of repeater UDP addresses; when provided the bridge will use it to
+// broadcast converted YSF packets to local repeaters.
+func NewBridgeWithServer(cfg config.YSF2DMRConfig, log *logger.Logger, srv *network.Server, repeaterAddrProvider func() []*net.UDPAddr) (*Bridge, error) {
 	b := &Bridge{
-		config:    cfg,
-		logger:    log.WithComponent("ysf2dmr"),
-		converter: codec.NewConverter(),
+		config:               cfg,
+		logger:               log.WithComponent("ysf2dmr"),
+		converter:            codec.NewConverter(),
+		repeaterAddrProvider: repeaterAddrProvider,
+	}
+
+	if srv != nil {
+		b.ysfServer = srv
+		b.ownsYSFServer = false
+	} else {
+		b.ysfServer = nil
+		b.ownsYSFServer = true
 	}
 
 	return b, nil
+}
+
+// Backwards-compatible constructor used by tests and adapters that don't provide
+// a shared YSF server. It simply calls NewBridgeWithServer with nil server and
+// provider.
+func NewBridge(cfg config.YSF2DMRConfig, log *logger.Logger) (*Bridge, error) {
+	return NewBridgeWithServer(cfg, log, nil, nil)
 }
 
 // Start starts the YSF2DMR bridge
@@ -116,28 +145,76 @@ func (b *Bridge) Start(ctx context.Context) error {
 		}
 	}
 
-	// Initialize YSF server (for receiving from YSF side)
-	b.ysfServer = network.NewServer(
-		b.config.YSF.LocalAddress,
-		b.config.YSF.LocalPort,
-	)
+	// Initialize YSF server (for receiving from YSF side) only if we don't have one
+	b.logger.Info("YSF server initialization check",
+		logger.Any("server_nil", b.ysfServer == nil),
+		logger.Any("owns_server", b.ownsYSFServer))
 
-	if err := b.ysfServer.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start YSF server: %w", err)
+	if b.ysfServer == nil {
+		b.logger.Warn("Creating NEW YSF server for bridge - this may not receive reflector traffic!")
+		b.ysfServer = network.NewServer(
+			b.config.YSF.LocalAddress,
+			b.config.YSF.LocalPort,
+		)
+
+		// Start YSF server in background so we can initialize DMR network in the same Start call.
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- b.ysfServer.Start(ctx)
+		}()
+
+		// Wait briefly for an immediate startup error (e.g. bind failure). If none, assume server started.
+		select {
+		case err := <-errCh:
+			if err != nil {
+				return fmt.Errorf("failed to start YSF server: %w", err)
+			}
+		case <-time.After(250 * time.Millisecond):
+			// likely started successfully; server will log its listening address
+		}
+
+		b.logger.Info("YSF server started",
+			logger.String("address", b.config.YSF.LocalAddress),
+			logger.Int("port", b.config.YSF.LocalPort))
+	} else {
+		b.logger.Info("Using shared YSF server - can broadcast to reflector repeaters",
+			logger.String("address", b.config.YSF.LocalAddress),
+			logger.Int("port", b.config.YSF.LocalPort))
 	}
-
-	b.logger.Info("YSF server started",
-		logger.String("address", b.config.YSF.LocalAddress),
-		logger.Int("port", b.config.YSF.LocalPort))
 
 	// Initialize DMR network connection
 	if b.config.DMR.Enabled {
+		// Debug: log the effective DMR config we will use (mask password)
+		maskedPwd := ""
+		if b.config.DMR.Password != "" {
+			maskedPwd = "***"
+		}
+		b.logger.Debug("Preparing DMR network with config",
+			logger.String("address", b.config.DMR.Address),
+			logger.Int("port", b.config.DMR.Port),
+			logger.Uint32("id", b.config.DMR.ID),
+			logger.String("password", maskedPwd),
+			logger.Uint32("startup_tg", b.config.DMR.StartupTG))
+
+		// Also log at info level so we always see the DMR startup attempt in logs
+		b.logger.Info("YSF2DMR: DMR network enabled",
+			logger.String("address", b.config.DMR.Address),
+			logger.Int("port", b.config.DMR.Port),
+			logger.Uint32("id", b.config.DMR.ID),
+			logger.Uint32("startup_tg", b.config.DMR.StartupTG))
+
 		dmrConfig := dmr.Config{
-			Address:      b.config.DMR.Address,
-			Port:         b.config.DMR.Port,
-			RepeaterID:   b.config.DMR.ID,
-			Password:     b.config.DMR.Password,
-			Callsign:     b.config.YSF.Callsign,
+			Address:    b.config.DMR.Address,
+			Port:       b.config.DMR.Port,
+			RepeaterID: b.config.DMR.ID,
+			Password:   b.config.DMR.Password,
+			// Use explicit DMR.callsign if configured, otherwise use YSF callsign
+			Callsign: func() string {
+				if b.config.DMR.Callsign != "" {
+					return b.config.DMR.Callsign
+				}
+				return b.config.YSF.Callsign
+			}(),
 			RXFreq:       b.config.DMR.RXFreq,
 			TXFreq:       b.config.DMR.TXFreq,
 			TXPower:      b.config.DMR.TXPower,
@@ -152,6 +229,9 @@ func (b *Bridge) Start(ctx context.Context) error {
 			TalkGroup:    b.config.DMR.StartupTG,
 			PingInterval: b.config.DMR.PingInterval,
 			AuthTimeout:  b.config.DMR.AuthTimeout,
+			// Pass through safe RPTC flag
+			// Note: All RPTC fields are sent from config values
+			// ...
 		}
 
 		network := dmr.NewNetwork(dmrConfig, b.logger)
@@ -171,7 +251,7 @@ func (b *Bridge) Start(ctx context.Context) error {
 
 	// Register YSF packet handler
 	b.ysfServer.RegisterHandler("YSFD", func(packet *network.Packet) error {
-		return b.handleYSFPacket(packet)
+		return b.HandleYSFPacket(packet)
 	})
 
 	// Start DMR packet handler if network is enabled
@@ -205,8 +285,12 @@ func (b *Bridge) Stop() error {
 
 	// Stop YSF server
 	if b.ysfServer != nil {
-		if err := b.ysfServer.Stop(); err != nil {
-			b.logger.Warn("Error stopping YSF server", logger.Error(err))
+		if b.ownsYSFServer {
+			if err := b.ysfServer.Stop(); err != nil {
+				b.logger.Warn("Error stopping YSF server", logger.Error(err))
+			}
+		} else {
+			b.logger.Debug("Shared YSF server not stopped by bridge")
 		}
 	}
 
@@ -214,8 +298,9 @@ func (b *Bridge) Stop() error {
 	return nil
 }
 
-// handleYSFPacket processes a YSF packet and forwards to DMR
-func (b *Bridge) handleYSFPacket(packet *network.Packet) error {
+// HandleYSFPacket processes a YSF packet and forwards to DMR
+// This is now exported so the DMRBridgeAdapter can forward packets to it
+func (b *Bridge) HandleYSFPacket(packet *network.Packet) error {
 	// Only process YSFD (voice data) packets
 	if packet.Type != "YSFD" {
 		return nil
@@ -400,6 +485,9 @@ func (b *Bridge) handleDMRPacket(packet *dmr.Packet) error {
 			logger.Uint32("dmr_id", dmrdPacket.SrcID),
 			logger.Uint32("talkgroup", dmrdPacket.DstID))
 
+		// Set converter metadata for packet generation
+		b.converter.SetMetadata(dmrCallsign, dmrdPacket.SrcID)
+
 		b.stats.mu.Lock()
 		b.stats.TotalCalls++
 		b.stats.DMRToYSFCalls++
@@ -423,10 +511,44 @@ func (b *Bridge) handleDMRPacket(packet *dmr.Packet) error {
 	}
 
 	if ysfPacket != nil {
-		// Send to YSF reflector
-		// TODO: Integrate with main reflector to broadcast
-		b.logger.Debug("Generated YSF packet",
-			logger.Int("size", len(ysfPacket)))
+		// Send to YSF reflector via shared server and repeater addresses
+		b.logger.Info("Generated YSF packet from DMR",
+			logger.Int("size", len(ysfPacket)),
+			logger.String("header", fmt.Sprintf("%X", ysfPacket[0:35])),
+			logger.String("callsign", string(ysfPacket[4:14])))
+
+		// Broadcast to repeaters if we have a provider and server
+		if b.repeaterAddrProvider != nil && b.ysfServer != nil {
+			addrs := b.repeaterAddrProvider()
+			if len(addrs) > 0 {
+				// Log detailed information about what we're sending
+				addrStrings := make([]string, len(addrs))
+				for i, addr := range addrs {
+					addrStrings[i] = addr.String()
+				}
+
+				b.logger.Info("Broadcasting DMR→YSF converted packet",
+					logger.Int("repeaters", len(addrs)),
+					logger.Int("size", len(ysfPacket)),
+					logger.Any("repeater_addresses", addrStrings),
+					logger.Any("server_instance", fmt.Sprintf("%p", b.ysfServer)))
+
+				if err := b.ysfServer.BroadcastData(ysfPacket, addrs, nil); err != nil {
+					b.logger.Error("Failed to broadcast DMR→YSF packet", logger.Error(err))
+				} else {
+					b.logger.Info("DMR→YSF broadcast completed successfully")
+				}
+			} else {
+				b.logger.Warn("No YSF repeaters connected - DMR→YSF packet not sent")
+			}
+		} else {
+			// More explicit debug info for missing components
+			hasProvider := b.repeaterAddrProvider != nil
+			hasServer := b.ysfServer != nil
+			b.logger.Warn("Cannot broadcast DMR→YSF packet - missing components",
+				logger.Any("has_provider", hasProvider),
+				logger.Any("has_server", hasServer))
+		}
 
 		b.stats.mu.Lock()
 		b.stats.YSFPackets++

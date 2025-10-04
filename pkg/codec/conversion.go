@@ -89,9 +89,39 @@ func (c *Converter) DMRToYSF(dmrVoiceData []byte) ([]byte, error) {
 	// Build YSF packet from buffered frames
 	ysfPacket := make([]byte, YSFDPacketSize)
 
-	// Build YSF header
+	// Build YSF header matching C++ YSF2DMR implementation
+	// Structure from MMDVM_CM/YSF2DMR:
+	// Bytes 0-3: "YSFD"
+	// Bytes 4-13: Local callsign (reflector/gateway)
+	// Bytes 14-23: Source callsign (who's talking)
+	// Bytes 24-33: Destination callsign ("ALL" for group calls)
+	// Byte 34: Net frame counter
+	// Bytes 35+: Voice data
+
 	copy(ysfPacket[0:4], "YSFD")
-	// TODO: Add proper header, callsign, FICH, etc.
+
+	// Bytes 4-13: Local callsign (reflector - use a placeholder)
+	copy(ysfPacket[4:14], "DMR       ") // 10 bytes, space-padded
+
+	// Bytes 14-23: Source callsign (the DMR talker)
+	srcCallsign := c.srcCallsign
+	if srcCallsign == "" {
+		srcCallsign = fmt.Sprintf("DMR%d", c.srcDMRID)
+	}
+	// Pad callsign to 10 bytes
+	if len(srcCallsign) > 10 {
+		srcCallsign = srcCallsign[:10]
+	}
+	copy(ysfPacket[14:24], srcCallsign)
+	for i := 14 + len(srcCallsign); i < 24; i++ {
+		ysfPacket[i] = ' ' // Space padding
+	}
+
+	// Bytes 24-33: Destination callsign (ALL for group calls)
+	copy(ysfPacket[24:34], "ALL       ") // 10 bytes, space-padded
+
+	// Byte 34: Net frame counter
+	ysfPacket[34] = c.dmrFrameCount
 
 	// Inject voice frames
 	ysfPayload := &YSFVoicePayload{

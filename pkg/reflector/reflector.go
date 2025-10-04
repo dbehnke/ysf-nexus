@@ -82,6 +82,10 @@ func NewWithVersion(cfg *config.Config, log *logger.Logger, version, buildTime s
 	// Initialize network server
 	r.server = network.NewServer(cfg.Server.Host, cfg.Server.Port)
 	r.server.SetDebug(cfg.Logging.Level == "debug")
+	log.Info("Reflector network server created",
+		logger.String("host", cfg.Server.Host),
+		logger.Int("port", cfg.Server.Port),
+		logger.Any("server_instance", fmt.Sprintf("%p", r.server)))
 
 	// Initialize repeater manager
 	r.repeaterManager = repeater.NewManagerWithLogger(
@@ -94,11 +98,11 @@ func NewWithVersion(cfg *config.Config, log *logger.Logger, version, buildTime s
 	)
 
 	// Initialize bridge manager
-	r.bridgeManager = bridge.NewManager(cfg.Bridges, r.server, r.logger)
+	r.bridgeManager = bridge.NewManager(cfg.Bridges, r.server, r.logger, r.repeaterManager.GetAllAddresses)
 
 	// Initialize YSF2DMR bridge if enabled
 	if cfg.YSF2DMR.Enabled {
-		ysf2dmrBridge, err := ysf2dmr.NewBridge(cfg.YSF2DMR, r.logger)
+		ysf2dmrBridge, err := ysf2dmr.NewBridgeWithServer(cfg.YSF2DMR, r.logger, r.server, r.repeaterManager.GetAllAddresses)
 		if err != nil {
 			r.logger.Error("Failed to create YSF2DMR bridge", logger.Error(err))
 		} else {
@@ -730,30 +734,33 @@ func (r *Reflector) handleStatusPacket(packet *network.Packet) error {
 // processEvents was removed because events are forwarded/consumed elsewhere. If needed,
 // reintroduce with careful event channel ownership semantics.
 
-// forwardToBridges forwards local repeater traffic to all connected bridges
+// forwardToBridges forwards local repeater traffic to all connected bridges (YSF and DMR)
 func (r *Reflector) forwardToBridges(data []byte, callsign string) {
-	// Get bridge addresses from bridge manager
+	// Get YSF bridge addresses from bridge manager
 	bridgeAddresses := r.bridgeManager.GetConnectedAddresses()
 
 	if len(bridgeAddresses) > 0 {
-		// Forward data to all connected bridges
+		// Forward data to all connected YSF bridges via UDP
 		for _, addr := range bridgeAddresses {
 			if err := r.server.SendPacket(data, addr); err != nil {
-				r.logger.Error("Failed to forward data to bridge",
+				r.logger.Error("Failed to forward data to YSF bridge",
 					logger.String("callsign", callsign),
 					logger.String("bridge", addr.String()),
 					logger.Error(err))
 			} else {
-				r.logger.Debug("Forwarded local data to bridge",
+				r.logger.Debug("Forwarded local data to YSF bridge",
 					logger.String("callsign", callsign),
 					logger.String("bridge", addr.String()))
 			}
 		}
 
-		r.logger.Debug("Forwarded local repeater traffic to bridges",
+		r.logger.Debug("Forwarded local repeater traffic to YSF bridges",
 			logger.String("callsign", callsign),
-			logger.Int("bridges", len(bridgeAddresses)))
+			logger.Int("ysf_bridges", len(bridgeAddresses)))
 	}
+
+	// Also forward to DMR bridges (these need to convert YSF → DMR)
+	r.bridgeManager.ForwardToDMRBridges(data, callsign)
 }
 
 // logStats periodically logs statistics

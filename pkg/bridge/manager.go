@@ -9,6 +9,7 @@ import (
 
 	"github.com/dbehnke/ysf-nexus/pkg/config"
 	"github.com/dbehnke/ysf-nexus/pkg/logger"
+	"github.com/dbehnke/ysf-nexus/pkg/network"
 	"github.com/robfig/cron/v3"
 )
 
@@ -28,8 +29,10 @@ type BridgeRunner interface {
 type Manager struct {
 	config []config.BridgeConfig
 	logger *logger.Logger
-	server NetworkServer
-	cron   *cron.Cron
+	server *network.Server
+	// provider to obtain addresses of repeaters (populated by reflector)
+	repeaterAddrProvider func() []*net.UDPAddr
+	cron                 *cron.Cron
 
 	// Bridge tracking (now supports both YSF and DMR bridges)
 	mu      sync.RWMutex
@@ -95,18 +98,19 @@ type BridgeStatus struct {
 }
 
 // NewManager creates a new bridge manager
-func NewManager(config []config.BridgeConfig, server NetworkServer, logger *logger.Logger) *Manager {
+func NewManager(config []config.BridgeConfig, server *network.Server, logger *logger.Logger, repeaterAddrProvider func() []*net.UDPAddr) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Manager{
-		config:    config,
-		logger:    logger,
-		server:    server,
-		cron:      cron.New(cron.WithSeconds()),
-		bridges:   make(map[string]BridgeRunner),
-		schedules: make(map[string]*ScheduleInfo),
-		ctx:       ctx,
-		cancel:    cancel,
+		config:               config,
+		logger:               logger,
+		server:               server,
+		repeaterAddrProvider: repeaterAddrProvider,
+		cron:                 cron.New(cron.WithSeconds()),
+		bridges:              make(map[string]BridgeRunner),
+		schedules:            make(map[string]*ScheduleInfo),
+		ctx:                  ctx,
+		cancel:               cancel,
 	}
 }
 
@@ -173,7 +177,7 @@ func (m *Manager) setupBridge(config config.BridgeConfig) error {
 		m.logger.Info("Created YSF bridge", logger.String("name", config.Name))
 
 	case "dmr":
-		dmrBridge, err := NewDMRBridgeAdapter(config, m.logger)
+		dmrBridge, err := NewDMRBridgeAdapter(config, m.logger, m.server, m.repeaterAddrProvider)
 		if err != nil {
 			return fmt.Errorf("failed to create DMR bridge %s: %w", config.Name, err)
 		}
@@ -557,4 +561,61 @@ func (m *Manager) GetConnectedAddresses() []*net.UDPAddr {
 		}
 	}
 	return addresses
+}
+
+// ForwardToDMRBridges forwards YSF packets to all connected DMR bridges for conversion
+func (m *Manager) ForwardToDMRBridges(data []byte, callsign string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	dmrBridgeCount := 0
+	for _, bridgeRunner := range m.bridges {
+		// Only DMR bridges need packet injection
+		if dmrBridge, ok := bridgeRunner.(*DMRBridgeAdapter); ok {
+			if dmrBridge.IsConnected() {
+				dmrBridgeCount++
+
+				// Parse the packet data to create a network.Packet
+				// We need to create a minimal packet structure for the bridge
+				packet := &network.Packet{
+					Type:     "YSFD",
+					Data:     data,
+					Callsign: callsign,
+					// Source address doesn't matter for DMR bridge injection
+					Source: &net.UDPAddr{IP: net.IPv4zero, Port: 0},
+				}
+
+				// Extract source callsign if available from packet data
+				if len(data) >= 24 {
+					// Source callsign is at bytes 14-23 (10 bytes)
+					srcCS := string(data[14:24])
+					// Trim spaces and null bytes
+					for i, c := range srcCS {
+						if c == 0 || c == ' ' {
+							srcCS = srcCS[:i]
+							break
+						}
+					}
+					packet.SourceCS = srcCS
+				}
+
+				if err := dmrBridge.InjectYSFPacket(packet); err != nil {
+					m.logger.Debug("Failed to forward to DMR bridge",
+						logger.String("bridge", dmrBridge.GetName()),
+						logger.String("callsign", callsign),
+						logger.Error(err))
+				} else {
+					m.logger.Debug("Forwarded to DMR bridge",
+						logger.String("bridge", dmrBridge.GetName()),
+						logger.String("callsign", callsign))
+				}
+			}
+		}
+	}
+
+	if dmrBridgeCount > 0 {
+		m.logger.Debug("Forwarded local repeater traffic to DMR bridges",
+			logger.String("callsign", callsign),
+			logger.Int("dmr_bridges", dmrBridgeCount))
+	}
 }

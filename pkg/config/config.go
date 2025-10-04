@@ -67,6 +67,8 @@ type BridgeConfig struct {
 
 // DMRBridgeConfig holds DMR-specific bridge configuration
 type DMRBridgeConfig struct {
+	// Optional callsign to send in RPTC (if empty, bridge name is used by adapter)
+	Callsign          string        `mapstructure:"callsign"`
 	ID                uint32        `mapstructure:"id"`                  // DMR ID
 	Network           string        `mapstructure:"network"`             // Network name (for display)
 	Address           string        `mapstructure:"address"`             // DMR network server address
@@ -78,7 +80,7 @@ type DMRBridgeConfig struct {
 	EnablePrivateCall bool          `mapstructure:"enable_private_call"` // Enable private calls
 	RXFreq            uint32        `mapstructure:"rx_freq"`             // RX frequency in Hz
 	TXFreq            uint32        `mapstructure:"tx_freq"`             // TX frequency in Hz
-	TXPower           uint32        `mapstructure:"tx_power"`            // TX power level
+	TXPower           uint8         `mapstructure:"tx_power"`            // TX power level in dBm (00-99)
 	Latitude          float32       `mapstructure:"latitude"`            // Latitude
 	Longitude         float32       `mapstructure:"longitude"`           // Longitude
 	Height            int32         `mapstructure:"height"`              // Height above ground
@@ -151,6 +153,8 @@ type YSF2DMRYSFConfig struct {
 
 // YSF2DMRDMRConfig holds DMR network configuration for YSF2DMR
 type YSF2DMRDMRConfig struct {
+	// Optional callsign to send in RPTC (if empty, ysf.callsign or adapter-provided value is used)
+	Callsign          string        `mapstructure:"callsign"`
 	Enabled           bool          `mapstructure:"enabled"`
 	ID                uint32        `mapstructure:"id"`
 	Network           string        `mapstructure:"network"`
@@ -163,7 +167,7 @@ type YSF2DMRDMRConfig struct {
 	EnablePrivateCall bool          `mapstructure:"enable_private_call"`
 	RXFreq            uint32        `mapstructure:"rx_freq"`
 	TXFreq            uint32        `mapstructure:"tx_freq"`
-	TXPower           uint32        `mapstructure:"tx_power"`
+	TXPower           uint8         `mapstructure:"tx_power"`
 	Latitude          float32       `mapstructure:"latitude"`
 	Longitude         float32       `mapstructure:"longitude"`
 	Height            int32         `mapstructure:"height"`

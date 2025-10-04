@@ -2,6 +2,7 @@ package dmr
 
 import (
 	"bytes"
+	"encoding/binary"
 	"testing"
 )
 
@@ -93,10 +94,16 @@ func TestRPTCPacket(t *testing.T) {
 		t.Errorf("Expected packet length 302, got %d", len(data))
 	}
 
-	// Verify callsign (bytes 8-16)
+	// Verify callsign (bytes 8-16 per DMRHub implementation)
 	callsign := string(bytes.TrimSpace(data[8:16]))
 	if callsign != "W1ABC" {
 		t.Errorf("Expected callsign W1ABC, got %s", callsign)
+	}
+
+	// Verify repeater ID (bytes 4-8)
+	rid := binary.BigEndian.Uint32(data[4:8])
+	if rid != 1234567 {
+		t.Errorf("Expected repeater ID 1234567, got %d", rid)
 	}
 }
 
@@ -106,12 +113,12 @@ func TestMSTPPacket(t *testing.T) {
 	packet := NewMSTPPacket(repeaterID)
 	data := packet.Serialize()
 
-	// Check packet type
-	if string(data[0:4]) != PacketTypeMSTP {
-		t.Errorf("Expected packet type %s, got %s", PacketTypeMSTP, string(data[0:4]))
+	// Check packet type - RPTPONG format (7 bytes)
+	if string(data[0:7]) != "RPTPONG" {
+		t.Errorf("Expected packet type RPTPONG, got %s", string(data[0:7]))
 	}
 
-	// Check length
+	// Check length (RPTPONG + 4 byte repeater ID)
 	if len(data) != 11 {
 		t.Errorf("Expected packet length 11, got %d", len(data))
 	}

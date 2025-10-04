@@ -44,6 +44,7 @@ bridges:
       network: "BrandMeister"
       address: "3100.r2.bm.dmrlog.net"
       port: 62031
+      callsign: "MYHOTSPT"     # Optional: callsign to send in RPTC (defaults to bridge name)
   password: "passw0rd"   # CHANGE THIS! You can also set this via env var BRIDGE_BRANDMEISTERTG91_DMR_PASSWORD
       talk_group: 91         # Worldwide
       slot: 2
@@ -51,7 +52,7 @@ bridges:
       # Optional repeater info
       rx_freq: 435000000
       tx_freq: 435000000
-      tx_power: 1
+      tx_power: 25           # TX power in dBm (00-99), 25 dBm ≈ 316 watts
       latitude: 42.5803
       longitude: -82.9469
       height: 50
@@ -71,7 +72,8 @@ bridges:
       network: "BrandMeister"
       address: "3100.r2.bm.dmrlog.net"
       port: 62031
-  password: "passw0rd"   # Or set via BRIDGE_BRANDMEISTERTAC310_DMR_PASSWORD
+     callsign: "TAC310"     # Optional: callsign to send in RPTC
+     password: "passw0rd"   # Or set via BRIDGE_BRANDMEISTERTAC310_DMR_PASSWORD
       talk_group: 310        # TAC 310
       slot: 2
       color_code: 1
@@ -136,7 +138,7 @@ ysf2dmr:
     # Optional repeater info for networks that require it
     rx_freq: 435000000         # RX frequency in Hz (435.000 MHz)
     tx_freq: 435000000         # TX frequency in Hz
-    tx_power: 1                # TX power (1=low, 2=medium, 3=high)
+    tx_power: 25               # TX power in dBm (00-99), 25 dBm ≈ 316 watts
     latitude: 42.5803          # Repeater latitude
     longitude: -82.9469        # Repeater longitude
     height: 50                 # Height above ground in meters
