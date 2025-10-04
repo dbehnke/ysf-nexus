@@ -1,0 +1,41 @@
+name: Frontend dependency audit
+
+on:
+  push:
+    paths:
+      - 'frontend/**'
+  pull_request:
+    paths:
+      - 'frontend/**'
+  schedule:
+    - cron: '0 3 * * *' # daily at 03:00 UTC
+
+jobs:
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: |
+          npm ci
+
+      - name: Run npm audit (fail on vulnerabilities)
+        working-directory: ./frontend
+        run: |
+          # Exit non-zero if vulnerabilities are found. Adjust --audit-level as needed.
+          npm audit --audit-level=moderate
+
+      - name: Save npm audit report
+        if: always()
+        working-directory: ./frontend
+        run: |
+          npm audit --json > npm-audit-report.json || true
+          echo "Saved report at frontend/npm-audit-report.json"

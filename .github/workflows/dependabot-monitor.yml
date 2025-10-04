@@ -1,0 +1,60 @@
+name: Dependabot PR monitor
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  report-parse:
+    if: github.actor == 'dependabot[bot]' || github.actor == 'dependabot-preview[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - name: Parse PR title and decide
+        id: parse
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const title = context.payload.pull_request.title || ''
+            // Extract first two version-like tokens (e.g., 1.2.3)
+            const matches = title.match(/[0-9]+(\.[0-9]+)+/g) || []
+            const from = matches[0] || ''
+            const to = matches[1] || ''
+            let allow = 'unknown'
+            if (!from || !to) {
+              allow = 'unknown'
+            } else {
+              const fromMaj = from.split('.')[0]
+              const toMaj = to.split('.')[0]
+              allow = (fromMaj === toMaj) ? 'yes' : 'no'
+            }
+            const body = `Dependabot parse report\n\n- PR title: ${title}\n- from: ${from || '(none found)'}\n- to: ${to || '(none found)'}\n- allow_auto_merge: ${allow}\n\nIf parsing looks wrong, update the auto-merge workflow parsing logic.`
+            // Post a comment on the PR
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body
+            })
+            return { from, to, allow }
+
+      - name: Add label based on decision
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { from, to, allow } = ${{ toJson(steps.parse.outputs) }}
+            const label = allow === 'yes' ? 'dependabot/auto-merge-allowed' : (allow === 'no' ? 'dependabot/auto-merge-skip' : 'dependabot/auto-merge-unknown')
+            // Ensure label exists
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                labels: [label]
+              })
+            } catch (e) {
+              core = require('@actions/core');
+              core.info('Failed to add label: ' + e.message)
+            }

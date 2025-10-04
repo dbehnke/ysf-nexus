@@ -250,15 +250,15 @@ logging:
 			if err != nil {
 				t.Fatalf("Failed to create temp file: %v", err)
 			}
-						defer func() { _ = os.Remove(tempFile.Name()) }()
+			defer func() { _ = os.Remove(tempFile.Name()) }()
 
 			_, err = tempFile.WriteString(tt.config)
 			if err != nil {
 				t.Fatalf("Failed to write temp file: %v", err)
 			}
-						if err := tempFile.Close(); err != nil {
-							t.Logf("warning: tempFile.Close failed: %v", err)
-						}
+			if err := tempFile.Close(); err != nil {
+				t.Logf("warning: tempFile.Close failed: %v", err)
+			}
 
 			// Load and validate
 			_, err = Load(tempFile.Name())
