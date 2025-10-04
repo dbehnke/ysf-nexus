@@ -59,13 +59,19 @@ func TestManager_ScheduledBridge_Timing(t *testing.T) {
 		t.Errorf("expected handshake packets to have been sent during scheduled window")
 	}
 
-	// Now wait until after the scheduled duration to ensure disconnect has occurred
-	time.Sleep(2000 * time.Millisecond)
+	// Now wait until after the scheduled duration to ensure disconnect has occurred.
+	// Poll for the disconnected state for up to 3s to avoid brittle timing assumptions in CI.
+	timeout := time.Now().Add(3 * time.Second)
+	for time.Now().Before(timeout) {
+		status = mgr.GetStatus()
+		bstatus = status["int-test-scheduled"]
+		if bstatus.State != StateConnected {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 
-	// After waiting, the bridge should not be in connected state (it should have stopped)
-	status = mgr.GetStatus()
-	bstatus = status["int-test-scheduled"]
-
+	// After polling, the bridge should not be in connected state (it should have stopped)
 	if bstatus.State == StateConnected {
 		t.Errorf("expected bridge to have disconnected after scheduled window, still connected")
 	}
