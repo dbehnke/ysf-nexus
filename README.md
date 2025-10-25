@@ -113,21 +113,21 @@ YSF Nexus can automatically connect to other YSF reflectors on a schedule. When 
 ```yaml
 bridges:
   - name: "Primary Hub"
-    callsign: "N0CALL"        # Your amateur radio callsign (defaults to "YSF-NEXUS")
+    callsign: "YOURCALL"      # Your amateur radio callsign (e.g., "W1ABC")
     host: "ysf-main.example.com"
     port: 42000
     schedule: "0 8 * * *"     # Daily at 8 AM
     duration: "2h"            # Stay connected for 2 hours
 
   - name: "Regional Net"
-    callsign: "W1ABC"         # Use your own callsign for proper identification
+    callsign: "YOURCALL"      # Use your own callsign for proper identification
     host: "regional.ysf.net"
     port: 42000
     schedule: "0 20 * * 6"    # Saturdays at 8 PM
     duration: "1h30m"         # 1.5 hour duration
 ```
 
-**Note:** When bridging between YSF-Nexus servers, always specify a proper amateur radio callsign. This ensures your bridge connection appears with a recognizable callsign instead of the generic bridge name. The callsign must be 1-10 uppercase characters (A-Z, 0-9, dash, and space allowed).
+**Note:** When bridging between YSF-Nexus servers, always specify a proper amateur radio callsign. This ensures your bridge connection appears with a recognizable callsign instead of the generic bridge name. The callsign must be 1-10 uppercase characters (A-Z, 0-9, dash, and space allowed). Replace "YOURCALL" with your actual amateur radio callsign.
 
 ## 📡 MQTT Integration
 

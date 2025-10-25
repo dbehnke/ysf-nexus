@@ -5,7 +5,7 @@
 # A permanent bridge stays connected 24/7 with auto-reconnection
 bridges:
   - name: "permanent-bridge-west"
-    callsign: "N0CALL"             # Amateur radio callsign (defaults to "YSF-NEXUS" if not set)
+    callsign: "YOURCALL"           # Amateur radio callsign (e.g., "W1ABC", "VE3XYZ")
     host: "reflector-west.example.com"
     port: 4200
     enabled: true
@@ -17,7 +17,7 @@ bridges:
 # Example 2: Scheduled Bridge Configuration  
 # A scheduled bridge runs only during specific time windows
   - name: "scheduled-evening-net"
-    callsign: "W1XYZ"             # Use your own callsign for proper identification
+    callsign: "YOURCALL"           # Use your own callsign for proper identification
     host: "net-reflector.example.com"
     port: 4200
     enabled: true
@@ -31,7 +31,7 @@ bridges:
 # Example 3: Weekend-Only Bridge
 # Connects only on weekends for special events
   - name: "weekend-special"
-    callsign: "K5ABC"
+    callsign: "YOURCALL"
     host: "weekend.ysfreflector.org"
     port: 4200
     enabled: true
@@ -45,7 +45,7 @@ bridges:
 # Example 4: High-Frequency Connection Bridge
 # For reflectors that need frequent but short connections
   - name: "hourly-sync"
-    callsign: "VE3TEST"
+    callsign: "YOURCALL"
     host: "sync.repeaternetwork.net"
     port: 4200
     enabled: true
