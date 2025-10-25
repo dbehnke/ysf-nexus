@@ -230,9 +230,10 @@ func TestBridge_DisconnectPacket(t *testing.T) {
 	mockServer := &MockNetworkServer{}
 
 	config := config.BridgeConfig{
-		Name: "TEST-BRDG",
-		Host: "localhost",
-		Port: 4200,
+		Name:     "TEST-BRDG",
+		Callsign: "TEST-BRDG",
+		Host:     "localhost",
+		Port:     4200,
 	}
 
 	bridge := NewBridge(config, mockServer, logger)
@@ -267,14 +268,15 @@ func TestBridge_LongCallsignTruncation(t *testing.T) {
 	mockServer := &MockNetworkServer{}
 
 	config := config.BridgeConfig{
-		Name: "VERY-LONG-BRIDGE-NAME", // 20 chars, should be truncated to 10
-		Host: "localhost",
-		Port: 4200,
+		Name:     "VERY-LONG-BRIDGE-NAME",    // 20 chars
+		Callsign: "VERY-LONG-CALLSIGN-12345", // 23 chars, should be truncated to 10
+		Host:     "localhost",
+		Port:     4200,
 	}
 
 	bridge := NewBridge(config, mockServer, logger)
 
-	// Test createDisconnectPacket with long name
+	// Test createDisconnectPacket with long callsign
 	packet := bridge.createDisconnectPacket()
 
 	// Check that callsign was truncated to 10 characters

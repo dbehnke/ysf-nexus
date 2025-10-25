@@ -16,6 +16,7 @@ web:
 
 bridges:
   - name: "YSF001"
+    callsign: "YOURCALL"    # Callsign to use when connecting (e.g., "W1ABC", "VE3XYZ")
     host: "ysf001.example.com"
     port: 42000
     schedule: "0 */6 * * *"  # Every 6 hours
@@ -23,6 +24,7 @@ bridges:
     enabled: false
 
   - name: "Regional Net"
+    callsign: "YOURCALL"    # Use your own callsign for identification
     host: "regional.ysf.net"
     port: 42000
     schedule: "0 20 * * 6"   # Saturdays at 8 PM

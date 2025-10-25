@@ -19,8 +19,8 @@ func validate(config *Config) error {
 	}
 
 	// Validate bridge configurations
-	for i, bridge := range config.Bridges {
-		if err := validateBridge(&bridge); err != nil {
+	for i := range config.Bridges {
+		if err := validateBridge(&config.Bridges[i]); err != nil {
 			return fmt.Errorf("bridge config[%d]: %w", i, err)
 		}
 	}
@@ -110,6 +110,21 @@ func validateBridge(config *BridgeConfig) error {
 
 	if config.Name == "" {
 		return fmt.Errorf("name cannot be empty")
+	}
+
+	// Set default callsign if not specified
+	if config.Callsign == "" {
+		config.Callsign = "YSF-NEXUS"
+	}
+
+	// Validate callsign format (1-10 characters, alphanumeric, dash, and space allowed)
+	if len(config.Callsign) > 10 {
+		return fmt.Errorf("callsign too long (max 10 characters): %s", config.Callsign)
+	}
+	for _, c := range config.Callsign {
+		if !((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == ' ') {
+			return fmt.Errorf("callsign contains invalid character '%c' (only A-Z, 0-9, dash, and space allowed): %s", c, config.Callsign)
+		}
 	}
 
 	if config.Host == "" {

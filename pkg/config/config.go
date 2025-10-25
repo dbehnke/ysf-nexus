@@ -47,6 +47,7 @@ type WebConfig struct {
 // BridgeConfig holds bridge connection configuration
 type BridgeConfig struct {
 	Name        string        `mapstructure:"name"`
+	Callsign    string        `mapstructure:"callsign"`     // Callsign to use when connecting (defaults to "YSF-NEXUS")
 	Host        string        `mapstructure:"host"`
 	Port        int           `mapstructure:"port"`
 	Schedule    string        `mapstructure:"schedule"`
