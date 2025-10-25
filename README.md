@@ -79,7 +79,7 @@ web:
 
 bridges:
   - name: "YSF001"
-    callsign: "N0CALL"           # Your callsign (defaults to "YSF-NEXUS")
+    callsign: "W1ABC"            # REQUIRED: Your callsign
     host: "ysf001.example.com"
     port: 42000
     schedule: "0 */6 * * *"  # Every 6 hours
@@ -108,26 +108,30 @@ Access the web dashboard at `http://localhost:8080` to view:
 
 ## 🌉 Bridge System
 
-YSF Nexus can automatically connect to other YSF reflectors on a schedule. When bridging, you can specify a callsign to properly identify your bridge connection:
+YSF Nexus can automatically connect to other YSF reflectors on a schedule. **Callsign is required** for all enabled bridges:
 
 ```yaml
 bridges:
   - name: "Primary Hub"
-    callsign: "YOURCALL"      # Your amateur radio callsign (e.g., "W1ABC")
+    callsign: "W1ABC"         # REQUIRED: Your amateur radio callsign
     host: "ysf-main.example.com"
     port: 42000
     schedule: "0 8 * * *"     # Daily at 8 AM
     duration: "2h"            # Stay connected for 2 hours
 
   - name: "Regional Net"
-    callsign: "YOURCALL"      # Use your own callsign for proper identification
+    callsign: "VE3XYZ"        # REQUIRED: Use your own callsign
     host: "regional.ysf.net"
     port: 42000
     schedule: "0 20 * * 6"    # Saturdays at 8 PM
     duration: "1h30m"         # 1.5 hour duration
 ```
 
-**Note:** When bridging between YSF-Nexus servers, always specify a proper amateur radio callsign. This ensures your bridge connection appears with a recognizable callsign instead of the generic bridge name. The callsign must be 1-10 uppercase characters (A-Z, 0-9, dash, and space allowed). Replace "YOURCALL" with your actual amateur radio callsign.
+**Important:** 
+- Callsign is **required** for all enabled bridges - the application will fail to start without it
+- The callsign must be 1-10 uppercase characters (A-Z, 0-9, dash, and space allowed)
+- This ensures your bridge appears with a proper amateur radio callsign in the repeater list
+- Replace "YOURCALL" in config examples with your actual callsign
 
 ## 📡 MQTT Integration
 

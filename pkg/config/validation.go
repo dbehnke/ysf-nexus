@@ -112,9 +112,9 @@ func validateBridge(config *BridgeConfig) error {
 		return fmt.Errorf("name cannot be empty")
 	}
 
-	// Set default callsign if not specified
+	// Callsign is required for enabled bridges
 	if config.Callsign == "" {
-		config.Callsign = "YSF-NEXUS"
+		return fmt.Errorf("callsign is required for enabled bridges")
 	}
 
 	// Validate callsign format (1-10 characters, alphanumeric, dash, and space allowed)

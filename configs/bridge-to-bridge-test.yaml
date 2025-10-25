@@ -17,10 +17,10 @@ web:
   auth_required: false
 
 # Example bridge configuration for connecting to another YSF-Nexus server
-# IMPORTANT: Always specify a callsign when bridging between YSF-Nexus servers
+# IMPORTANT: Callsign is REQUIRED for all enabled bridges
 bridges:
   - name: "YSF-Test-2"
-    callsign: "YOURCALL"         # Replace with your amateur radio callsign (e.g., "W1ABC")
+    callsign: "YOURCALL"         # REQUIRED: Replace with your amateur radio callsign (e.g., "W1ABC")
     host: "localhost"            # Replace with actual host
     port: 42001                  # Port of the remote YSF-Nexus server
     enabled: false               # Set to true to enable the bridge
@@ -34,8 +34,8 @@ logging:
   format: "text"
 
 # Notes:
-# 1. The callsign field is now required for proper identification
-# 2. Without a callsign, the bridge will use "YSF-NEXUS" as default
-# 3. Callsign must be 1-10 uppercase characters (A-Z, 0-9, dash, space allowed)
-# 4. This ensures your bridge appears with a proper callsign in the repeater list
-# 5. Example valid callsigns: "W1ABC", "VE3XYZ", "KB1TEST", etc.
+# 1. The callsign field is REQUIRED for all enabled bridges
+# 2. Callsign must be 1-10 uppercase characters (A-Z, 0-9, dash, space allowed)
+# 3. This ensures your bridge appears with a proper callsign in the repeater list
+# 4. Example valid callsigns: "W1ABC", "VE3XYZ", "KB1TEST", etc.
+# 5. The application will fail to start if an enabled bridge has no callsign

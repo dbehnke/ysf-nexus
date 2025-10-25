@@ -54,10 +54,7 @@ func NewBridge(cfg config.BridgeConfig, server NetworkServer, logger *logger.Log
 		retryDelay = 30 * time.Second
 	}
 
-	// Set default callsign if not specified
-	if cfg.Callsign == "" {
-		cfg.Callsign = "YSF-NEXUS"
-	}
+	// Note: Callsign is now required in config validation, no default set here
 
 	return &Bridge{
 		config:         cfg,

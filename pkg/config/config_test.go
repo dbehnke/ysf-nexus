@@ -289,7 +289,7 @@ bridges:
 			expectErr: false,
 		},
 		{
-			name: "Bridge without callsign (should use default)",
+			name: "Bridge without callsign (should fail)",
 			config: `
 server:
   name: "Test"
@@ -300,7 +300,8 @@ bridges:
     enabled: true
     permanent: true
 `,
-			expectErr: false,
+			expectErr: true,
+			errorMsg:  "callsign is required",
 		},
 	}
 
@@ -322,7 +323,7 @@ bridges:
 			}
 
 			// Load and validate
-			cfg, err := Load(tempFile.Name())
+			_, err = Load(tempFile.Name())
 
 			if tt.expectErr {
 				if err == nil {
@@ -333,12 +334,6 @@ bridges:
 			} else {
 				if err != nil {
 					t.Errorf("Expected no error, got: %v", err)
-				}
-				// For configs with bridges and no callsign specified, verify default is applied
-				if cfg != nil && len(cfg.Bridges) > 0 && tt.name == "Bridge without callsign (should use default)" {
-					if cfg.Bridges[0].Callsign != "YSF-NEXUS" {
-						t.Errorf("Expected default callsign 'YSF-NEXUS', got '%s'", cfg.Bridges[0].Callsign)
-					}
 				}
 			}
 		})
