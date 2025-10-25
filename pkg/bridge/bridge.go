@@ -54,6 +54,11 @@ func NewBridge(cfg config.BridgeConfig, server NetworkServer, logger *logger.Log
 		retryDelay = 30 * time.Second
 	}
 
+	// Set default callsign if not specified
+	if cfg.Callsign == "" {
+		cfg.Callsign = "YSF-NEXUS"
+	}
+
 	return &Bridge{
 		config:         cfg,
 		logger:         logger,
@@ -423,14 +428,37 @@ func (b *Bridge) sendPacketLocked(data []byte) error {
 // Packet creation methods (placeholder implementations)
 
 func (b *Bridge) createHandshakePacket() []byte {
-	// TODO: Implement YSF-specific handshake packet
-	// For now, return a basic placeholder
-	return []byte("YSFP" + b.config.Name + "\000")
+	// Create proper YSF handshake packet (YSFP) - 14 bytes total
+	packet := make([]byte, 14)
+
+	// Type: YSFP
+	copy(packet[0:4], "YSFP")
+
+	// Callsign (padded to 10 bytes with spaces)
+	callsign := b.config.Callsign
+	if len(callsign) > 10 {
+		callsign = callsign[:10]
+	}
+	copy(packet[4:14], fmt.Sprintf("%-10s", callsign))
+
+	return packet
 }
 
 func (b *Bridge) createKeepAlivePacket() []byte {
-	// TODO: Implement YSF-specific keep-alive packet
-	return []byte("YSFS\000\000\000\000")
+	// Create proper YSF poll packet (YSFP) for keep-alive - 14 bytes total
+	packet := make([]byte, 14)
+
+	// Type: YSFP
+	copy(packet[0:4], "YSFP")
+
+	// Callsign (padded to 10 bytes with spaces)
+	callsign := b.config.Callsign
+	if len(callsign) > 10 {
+		callsign = callsign[:10]
+	}
+	copy(packet[4:14], fmt.Sprintf("%-10s", callsign))
+
+	return packet
 }
 
 func (b *Bridge) createPingPacket() []byte {
@@ -441,7 +469,7 @@ func (b *Bridge) createPingPacket() []byte {
 	copy(packet[0:4], "YSFP")
 
 	// Callsign (padded to 10 bytes with spaces)
-	callsign := b.config.Name
+	callsign := b.config.Callsign
 	if len(callsign) > 10 {
 		callsign = callsign[:10]
 	}
@@ -458,7 +486,7 @@ func (b *Bridge) createDisconnectPacket() []byte {
 	copy(packet[0:4], "YSFU")
 
 	// Callsign (padded to 10 bytes with spaces)
-	callsign := b.config.Name
+	callsign := b.config.Callsign
 	if len(callsign) > 10 {
 		callsign = callsign[:10]
 	}

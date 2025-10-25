@@ -241,6 +241,67 @@ logging:
 `,
 			expectErr: false,
 		},
+		{
+			name: "Bridge with invalid callsign (lowercase)",
+			config: `
+server:
+  name: "Test"
+bridges:
+  - name: "test-bridge"
+    callsign: "test123"
+    host: "localhost"
+    port: 4200
+    enabled: true
+    permanent: true
+`,
+			expectErr: true,
+			errorMsg:  "callsign contains invalid character",
+		},
+		{
+			name: "Bridge with callsign too long",
+			config: `
+server:
+  name: "Test"
+bridges:
+  - name: "test-bridge"
+    callsign: "VERY-LONG-CALLSIGN"
+    host: "localhost"
+    port: 4200
+    enabled: true
+    permanent: true
+`,
+			expectErr: true,
+			errorMsg:  "callsign too long",
+		},
+		{
+			name: "Bridge with valid callsign",
+			config: `
+server:
+  name: "Test"
+bridges:
+  - name: "test-bridge"
+    callsign: "N0CALL"
+    host: "localhost"
+    port: 4200
+    enabled: true
+    permanent: true
+`,
+			expectErr: false,
+		},
+		{
+			name: "Bridge without callsign (should use default)",
+			config: `
+server:
+  name: "Test"
+bridges:
+  - name: "test-bridge"
+    host: "localhost"
+    port: 4200
+    enabled: true
+    permanent: true
+`,
+			expectErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -261,7 +322,7 @@ logging:
 			}
 
 			// Load and validate
-			_, err = Load(tempFile.Name())
+			cfg, err := Load(tempFile.Name())
 
 			if tt.expectErr {
 				if err == nil {
@@ -272,6 +333,12 @@ logging:
 			} else {
 				if err != nil {
 					t.Errorf("Expected no error, got: %v", err)
+				}
+				// For configs with bridges and no callsign specified, verify default is applied
+				if cfg != nil && len(cfg.Bridges) > 0 && tt.name == "Bridge without callsign (should use default)" {
+					if cfg.Bridges[0].Callsign != "YSF-NEXUS" {
+						t.Errorf("Expected default callsign 'YSF-NEXUS', got '%s'", cfg.Bridges[0].Callsign)
+					}
 				}
 			}
 		})
