@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -12,7 +13,7 @@ func TestSimulateBridgeActivity(t *testing.T) {
 	config := DefaultTestConfig()
 	config.RepeaterCount = 0
 	config.BridgeCount = 1
-	config.APIBaseURL = "http://localhost:8080"
+	// We will use a local httptest.Server below instead of relying on an external API
 	config.APITimeout = 3 * time.Second
 
 	suite := NewIntegrationTestSuite(config)
@@ -26,6 +27,29 @@ func TestSimulateBridgeActivity(t *testing.T) {
 		t.Fatal("No bridge available")
 	}
 
+	// Start an httptest server that answers /api/current-talker using the bridge state.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/current-talker" {
+			http.NotFound(w, r)
+			return
+		}
+
+		ct := bridge.GetCurrentTalker()
+		if ct == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"callsign": ct.Callsign,
+			"location": ct.Location,
+		})
+	}))
+	defer srv.Close()
+
+	// point our API calls at the test server
+	apiURL := srv.URL
+
 	// Start a talker
 	_, err := bridge.StartTalker("SIM001", "Test Location")
 	if err != nil {
@@ -36,7 +60,7 @@ func TestSimulateBridgeActivity(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	// Call API
-	resp, err := http.Get(config.APIBaseURL + "/api/current-talker")
+	resp, err := http.Get(apiURL + "/api/current-talker")
 	if err != nil {
 		t.Logf("API call failed: %v", err)
 	} else {
@@ -58,7 +82,7 @@ func TestSimulateBridgeActivity(t *testing.T) {
 
 	time.Sleep(150 * time.Millisecond)
 
-	resp2, err := http.Get(config.APIBaseURL + "/api/current-talker")
+	resp2, err := http.Get(apiURL + "/api/current-talker")
 	if err != nil {
 		t.Logf("API call failed (after stop): %v", err)
 	} else {
@@ -71,7 +95,7 @@ func TestSimulateBridgeActivity(t *testing.T) {
 	suite.StartRandomActivity(2 * time.Second)
 	time.Sleep(3 * time.Second)
 
-	resp3, err := http.Get(config.APIBaseURL + "/api/current-talker")
+	resp3, err := http.Get(apiURL + "/api/current-talker")
 	if err != nil {
 		t.Logf("API call failed (after random): %v", err)
 	} else {
