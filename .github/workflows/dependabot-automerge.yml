@@ -51,10 +51,10 @@ jobs:
 
       - name: Enable Dependabot auto-merge
         if: ${{ steps.parse.outputs.allow_merge == 'true' }}
-        uses: pascalgn/dependabot-auto-merge-action@v2
+        uses: peter-evans/enable-pull-request-automerge@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          merge_method: squash
+          token: ${{ secrets.GITHUB_TOKEN }}
+          merge-method: squash
 
       - name: Skip auto-merge (major upgrade)
         if: ${{ steps.parse.outputs.allow_merge == 'false' }}
