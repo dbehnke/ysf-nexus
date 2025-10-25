@@ -1,0 +1,40 @@
+# Test Configuration for Bridge-to-Bridge Connection
+# This configuration demonstrates how to properly configure a bridge
+# between two YSF-Nexus servers using callsigns
+
+server:
+  host: "0.0.0.0"
+  port: 42000
+  timeout: "5m"
+  max_connections: 200
+  name: "YSF Test 1"
+  description: "Bridge Test"
+
+web:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  auth_required: false
+
+# Example bridge configuration for connecting to another YSF-Nexus server
+# IMPORTANT: Always specify a callsign when bridging between YSF-Nexus servers
+bridges:
+  - name: "YSF-Test-2"
+    callsign: "N0CALL"           # Replace with your amateur radio callsign
+    host: "localhost"            # Replace with actual host
+    port: 42001                  # Port of the remote YSF-Nexus server
+    enabled: false               # Set to true to enable the bridge
+    permanent: true              # Keep the bridge connected permanently
+    max_retries: 0               # 0 = infinite retries
+    retry_delay: "30s"
+    health_check: "60s"
+
+logging:
+  level: "info"
+  format: "text"
+
+# Notes:
+# 1. The callsign field is now required for proper identification
+# 2. Without a callsign, the bridge will use "YSF-NEXUS" as default
+# 3. Callsign must be 1-10 uppercase characters (A-Z, 0-9, dash, space allowed)
+# 4. This ensures your bridge appears with a proper callsign in the repeater list
