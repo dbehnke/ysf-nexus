@@ -28,26 +28,25 @@ jobs:
       - name: Parse versions from title
         id: parse
         run: |
-          set -l title "${{ steps.pr.outputs.result }}"
+          title="${{ steps.pr.outputs.result }}"
           # Dependabot titles often look like: "Bump package from 1.2.3 to 1.3.0"
           # Extract the two version strings and compare majors.
           # Use grep/awk to pull versions; fallback to allowing merge if parsing fails.
-          set -l from_ver (printf "%s" "$title" | grep -oE '[0-9]+(\.[0-9]+)+' | sed -n '1p' || echo)
-          set -l to_ver (printf "%s" "$title" | grep -oE '[0-9]+(\.[0-9]+)+' | sed -n '2p' || echo)
-          if test -z "$from_ver" -o -z "$to_ver" ;
-          then
+          from_ver=$(printf "%s" "$title" | grep -oE '[0-9]+(\.[0-9]+)+' | sed -n '1p' || true)
+          to_ver=$(printf "%s" "$title" | grep -oE '[0-9]+(\.[0-9]+)+' | sed -n '2p' || true)
+
+          if [ -z "$from_ver" ] || [ -z "$to_ver" ]; then
             echo "Could not parse versions from title; allowing auto-merge by default"
-            echo "allow_merge=true" >> $GITHUB_OUTPUT
+            echo "allow_merge=true" > "$GITHUB_OUTPUT"
           else
-            set -l from_major (printf "%s" "$from_ver" | cut -d. -f1)
-            set -l to_major (printf "%s" "$to_ver" | cut -d. -f1)
-            if test "$from_major" = "$to_major" ;
-            then
-              echo "allow_merge=true" >> $GITHUB_OUTPUT
+            from_major=$(printf "%s" "$from_ver" | cut -d. -f1)
+            to_major=$(printf "%s" "$to_ver" | cut -d. -f1)
+            if [ "$from_major" = "$to_major" ]; then
+              echo "allow_merge=true" > "$GITHUB_OUTPUT"
             else
-              echo "allow_merge=false" >> $GITHUB_OUTPUT
-            end
-          end
+              echo "allow_merge=false" > "$GITHUB_OUTPUT"
+            fi
+          fi
 
       - name: Enable Dependabot auto-merge
         if: ${{ steps.parse.outputs.allow_merge == 'true' }}
