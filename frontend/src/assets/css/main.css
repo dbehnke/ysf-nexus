@@ -1,6 +1,43 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Custom color palette */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  
+  --color-success-50: #f0fdf4;
+  --color-success-100: #dcfce7;
+  --color-success-400: #4ade80;
+  --color-success-500: #22c55e;
+  --color-success-600: #16a34a;
+  --color-success-700: #15803d;
+  --color-success-800: #166534;
+  
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-400: #fbbf24;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+  --color-warning-800: #92400e;
+  
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-400: #f87171;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+  --color-danger-800: #991b1b;
+  
+  /* Custom animations */
+  --animate-pulse-slow: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-bounce-subtle: bounce 1s ease-in-out 3;
+}
 
 @layer base {
   html {
@@ -65,23 +102,23 @@
   }
 
   .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700;
+    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200 bg-primary-600 text-white hover:bg-primary-700;
   }
 
   .btn-secondary {
-    @apply btn bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600;
+    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600;
   }
 
   .btn-success {
-    @apply btn bg-success-600 text-white hover:bg-success-700;
+    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200 bg-success-600 text-white hover:bg-success-700;
   }
 
   .btn-warning {
-    @apply btn bg-warning-600 text-white hover:bg-warning-700;
+    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200 bg-warning-600 text-white hover:bg-warning-700;
   }
 
   .btn-danger {
-    @apply btn bg-danger-600 text-white hover:bg-danger-700;
+    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200 bg-danger-600 text-white hover:bg-danger-700;
   }
 
   .badge {
@@ -89,23 +126,23 @@
   }
 
   .badge-success {
-    @apply badge bg-success-100 dark:bg-success-800/20 text-success-800 dark:text-success-400;
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success-100 dark:bg-success-800/20 text-success-800 dark:text-success-400;
   }
 
   .badge-secondary {
-    @apply badge bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300;
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300;
   }
 
   .badge-warning {
-    @apply badge bg-warning-100 dark:bg-warning-800/20 text-warning-800 dark:text-warning-400;
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-warning-100 dark:bg-warning-800/20 text-warning-800 dark:text-warning-400;
   }
 
   .badge-danger {
-    @apply badge bg-danger-100 dark:bg-danger-800/20 text-danger-800 dark:text-danger-400;
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-danger-100 dark:bg-danger-800/20 text-danger-800 dark:text-danger-400;
   }
 
   .badge-gray {
-    @apply badge bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300;
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300;
   }
 
   .status-indicator {
@@ -113,14 +150,14 @@
   }
 
   .status-online {
-    @apply status-indicator bg-success-500 animate-pulse-slow;
+    @apply w-3 h-3 rounded-full bg-success-500 animate-pulse-slow;
   }
 
   .status-talking {
-    @apply status-indicator bg-warning-500 animate-bounce-subtle;
+    @apply w-3 h-3 rounded-full bg-warning-500 animate-bounce-subtle;
   }
 
   .status-offline {
-    @apply status-indicator bg-gray-400;
+    @apply w-3 h-3 rounded-full bg-gray-400;
   }
 }
