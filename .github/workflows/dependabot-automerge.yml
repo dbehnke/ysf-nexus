@@ -17,6 +17,7 @@ jobs:
         id: pr
         uses: actions/github-script@v6
         with:
+          # Use string encoding to avoid JSON-encoding issues when title contains special chars
           result-encoding: string
           script: |
             const pr = await github.rest.pulls.get({
