@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.17",
-    "@vitejs/plugin-vue": "^6.0.0",
+    "@vitejs/plugin-vue": "^6.0.2",
     "@vue/eslint-config-prettier": "^10.2.0",
     "autoprefixer": "^10.4.22",
     "eslint": "^9.39.1",
