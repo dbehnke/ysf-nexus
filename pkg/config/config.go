@@ -10,13 +10,14 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	Server    ServerConfig    `mapstructure:"server"`
-	Web       WebConfig       `mapstructure:"web"`
-	Bridges   []BridgeConfig  `mapstructure:"bridges"`
-	MQTT      MQTTConfig      `mapstructure:"mqtt"`
-	Blocklist BlocklistConfig `mapstructure:"blocklist"`
-	Logging   LoggingConfig   `mapstructure:"logging"`
-	Metrics   MetricsConfig   `mapstructure:"metrics"`
+	Server       ServerConfig       `mapstructure:"server"`
+	Web          WebConfig          `mapstructure:"web"`
+	Bridges      []BridgeConfig     `mapstructure:"bridges"`
+	MQTT         MQTTConfig         `mapstructure:"mqtt"`
+	BrandMeister BrandMeisterConfig `mapstructure:"brandmeister"`
+	Blocklist    BlocklistConfig    `mapstructure:"blocklist"`
+	Logging      LoggingConfig      `mapstructure:"logging"`
+	Metrics      MetricsConfig      `mapstructure:"metrics"`
 }
 
 // ServerConfig holds YSF server configuration
@@ -47,7 +48,7 @@ type WebConfig struct {
 // BridgeConfig holds bridge connection configuration
 type BridgeConfig struct {
 	Name        string        `mapstructure:"name"`
-	Callsign    string        `mapstructure:"callsign"`     // Callsign to use when connecting (defaults to "YSF-NEXUS")
+	Callsign    string        `mapstructure:"callsign"` // Callsign to use when connecting (defaults to "YSF-NEXUS")
 	Host        string        `mapstructure:"host"`
 	Port        int           `mapstructure:"port"`
 	Schedule    string        `mapstructure:"schedule"`
@@ -69,6 +70,16 @@ type MQTTConfig struct {
 	Password    string `mapstructure:"password"`
 	QoS         byte   `mapstructure:"qos"`
 	Retained    bool   `mapstructure:"retained"`
+}
+
+// BrandMeisterConfig holds BrandMeister bridge configuration
+type BrandMeisterConfig struct {
+	Enabled         bool   `mapstructure:"enabled"`
+	MasterServer    string `mapstructure:"master_server"`
+	Password        string `mapstructure:"password"`
+	TargetTalkgroup int    `mapstructure:"target_talkgroup"`
+	Callsign        string `mapstructure:"callsign"`
+	DMRID           uint32 `mapstructure:"dmr_id"`
 }
 
 // BlocklistConfig holds blocklist configuration
@@ -170,6 +181,10 @@ func setDefaults() {
 	viper.SetDefault("mqtt.client_id", "ysf-nexus")
 	viper.SetDefault("mqtt.qos", 1)
 	viper.SetDefault("mqtt.retained", false)
+
+	// BrandMeister defaults
+	viper.SetDefault("brandmeister.enabled", false)
+	viper.SetDefault("brandmeister.target_talkgroup", 3100)
 
 	// Blocklist defaults
 	viper.SetDefault("blocklist.enabled", true)

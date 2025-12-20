@@ -3,9 +3,11 @@ package reflector
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
+	"github.com/dbehnke/ysf-nexus/pkg/brandmeister"
 	"github.com/dbehnke/ysf-nexus/pkg/bridge"
 	"github.com/dbehnke/ysf-nexus/pkg/config"
 	"github.com/dbehnke/ysf-nexus/pkg/logger"
@@ -47,12 +49,14 @@ type Reflector struct {
 	server          *network.Server
 	repeaterManager *repeater.Manager
 	bridgeManager   *bridge.Manager
+	bmBridge        *brandmeister.Manager
 	webServer       *web.Server
-	eventChan       chan repeater.Event
-	running         bool
-	mu              sync.RWMutex
-	version         string
-	buildTime       string
+
+	eventChan chan repeater.Event
+	running   bool
+	mu        sync.RWMutex
+	version   string
+	buildTime string
 
 	// Bridge talker tracking
 	bridgeTalkers map[string]*bridgeTalker // key: callsign+bridge_name
@@ -93,6 +97,30 @@ func NewWithVersion(cfg *config.Config, log *logger.Logger, version, buildTime s
 
 	// Initialize bridge manager
 	r.bridgeManager = bridge.NewManager(cfg.Bridges, r.server, r.logger)
+
+	// Initialize BrandMeister bridge
+	if cfg.BrandMeister.Enabled {
+		bmCfg := brandmeister.Config{
+			MasterServer: cfg.BrandMeister.MasterServer,
+			Callsign:     cfg.BrandMeister.Callsign,
+			Password:     cfg.BrandMeister.Password,
+			TargetTG:     cfg.BrandMeister.TargetTalkgroup,
+			DMRID:        cfg.BrandMeister.DMRID,
+		}
+		r.bmBridge = brandmeister.NewManager(bmCfg)
+		// Handle inbound traffic from BM
+		r.bmBridge.SetHandler(func(data []byte, source *net.UDPAddr) {
+			r.logger.Debug("Inbound data from BrandMeister",
+				logger.String("source", source.String()))
+
+			// Inject into data handler
+			packet, err := network.ParsePacket(data, source)
+			if err != nil {
+				return
+			}
+			_ = r.handleDataPacket(packet)
+		})
+	}
 
 	// Initialize web server
 	r.webServer = web.NewServer(cfg, log, r.repeaterManager, eventChan, r.bridgeManager, r, version, buildTime)
@@ -163,6 +191,17 @@ func (r *Reflector) Start(ctx context.Context) error {
 		}
 	}()
 
+	// Start BrandMeister bridge
+	if r.bmBridge != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := r.bmBridge.Start(ctx); err != nil {
+				r.logger.Error("BrandMeister bridge error", logger.Error(err))
+			}
+		}()
+	}
+
 	// Start bridge talker cleanup
 	wg.Add(1)
 	go func() {
@@ -222,6 +261,22 @@ func (r *Reflector) GetStats() *Stats {
 		BytesReceived:    networkMetrics.BytesReceived,
 		BytesSent:        networkMetrics.BytesSent,
 		RepeaterStats:    managerStats,
+	}
+}
+
+// GetBMStatus returns the current status of the BrandMeister bridge
+func (r *Reflector) GetBMStatus() map[string]interface{} {
+	if r.bmBridge == nil {
+		return map[string]interface{}{"enabled": false}
+	}
+
+	status := r.bmBridge.GetStatus()
+	return map[string]interface{}{
+		"enabled":       true,
+		"connected":     status.Connected,
+		"state":         status.State.String(),
+		"master_server": r.config.BrandMeister.MasterServer,
+		"target_tg":     r.config.BrandMeister.TargetTalkgroup,
 	}
 }
 
@@ -318,9 +373,18 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 	// Check if this packet is from a bridge connection
 	r.bridgeManager.HandleIncomingPacket(packet.Data, packet.Source)
 
+	// Check if this packet is from BrandMeister
+	isBM := r.bmBridge != nil && r.bmBridge.IsBMAddress(packet.Source)
+
 	// Handle bridge data packets differently
-	if r.bridgeManager.IsBridgeAddress(packet.Source) {
+	if r.bridgeManager.IsBridgeAddress(packet.Source) || isBM {
+		bridgeType := "YSF"
+		if isBM {
+			bridgeType = "BrandMeister"
+		}
+
 		r.logger.Debug("Received data from bridge connection",
+			logger.String("type", bridgeType),
 			logger.String("gateway", packet.Callsign),
 			logger.String("source_cs", effectiveCallsign),
 			logger.String("addr", packet.Source.String()))
@@ -388,6 +452,18 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 	// Forward local repeater traffic to all bridges (bidirectional bridge forwarding)
 	// Use already sanitized data to avoid sending suffixes to bridges
 	r.forwardToBridges(sanitizedData, effectiveCallsign)
+
+	// Forward to BrandMeister if not from BM
+	if r.bmBridge != nil && !isBM {
+		if err := r.bmBridge.Send(sanitizedData); err != nil {
+			r.logger.Error("Failed to forward data to BrandMeister",
+				logger.String("source_cs", effectiveCallsign),
+				logger.Error(err))
+		} else {
+			r.logger.Debug("Forwarded local data to BrandMeister",
+				logger.String("source_cs", effectiveCallsign))
+		}
+	}
 
 	return nil
 }
@@ -530,7 +606,15 @@ func (r *Reflector) getBridgeNameByAddress(addr string) (result string) {
 		}
 	}
 
+	// Check BrandMeister bridge
+	if r.bmBridge != nil && r.bmBridge.IsBMAddress(&net.UDPAddr{IP: net.ParseIP(addr)}) {
+		r.logger.Info("getBridgeNameByAddress: MATCH FOUND (BrandMeister)")
+		result = "BrandMeister"
+		return
+	}
+
 	r.logger.Info("getBridgeNameByAddress: NO MATCH FOUND", logger.String("addr", addr))
+
 	result = ""
 	return
 }

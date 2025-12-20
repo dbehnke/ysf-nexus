@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
-	"embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -26,8 +25,11 @@ import (
 	"github.com/dbehnke/ysf-nexus/pkg/repeater"
 )
 
-//go:embed dist
-var staticFiles embed.FS
+// When a built frontend is available the embedding can be provided in a separate
+// file that declares `var staticFiles fs.FS` using `//go:embed dist`. During
+// tests or in development without a built frontend the variable will be nil
+// which is handled by `setupStaticRoutes` and will fall back to a 404 handler.
+var staticFiles fs.FS
 
 // maskIPAddress masks the last two octets of an IP address for privacy
 // Example: 192.168.1.100:42000 -> 192.168.**:42000
@@ -586,9 +588,22 @@ func (s *Server) handleBridges(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Check if BrandMeister bridge is available
+	if s.reflector != nil {
+		if refl, ok := s.reflector.(interface {
+			GetBMStatus() map[string]interface{}
+		}); ok {
+			bmStatus := refl.GetBMStatus()
+			if enabled, ok := bmStatus["enabled"].(bool); ok && enabled {
+				bridges["BrandMeister"] = bmStatus
+			}
+		}
+	}
+
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"bridges": bridges,
 	}); err != nil {
+
 		s.logger.Error("failed to encode JSON response", logger.Error(err))
 	}
 }
