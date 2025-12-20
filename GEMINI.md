@@ -1,21 +1,4 @@
-# YSF Reflector Go Implementation Project (Copilot Notes)
-
-## TL;DR
-
-A Go-based YSF (Yaesu System Fusion) reflector with OpenSpot compatibility, a web dashboard, MQTT events, and bridge scaffolding. Production-ready core, tests and CI included. Use `config.yaml` to configure server, web, bridges and MQTT.
-
-**Current Status**: Production-ready with Dagger CI/CD pipeline. All core features implemented and tested.
-
-## Quick Summary
-
-This project ports the original C++ YSF reflector to Go, focusing on high-concurrency, observability, and operability. Key features include:
-
-- UDP-based packet handling for YSFP/YSFU/YSFD/YSFS
-- OpenSpot-compatible status handling (accepts 4-byte YSFS probes)
-- Single-active-stream enforcement and talk-timeout muting
-- Embedded web dashboard with WebSocket updates
-- MQTT event publishing for external integrations
-- Bridge framework for scheduled inter-reflector connections
+# YSF Reflector Go Implementation Project
 
 ## Project Overview
 
@@ -263,7 +246,7 @@ github.com/golang/mock       // Mock generation
 
 **Deliverables**: ✅ Monitoring and management capabilities
 
-### ✅ Phase 3: Bridge System (COMPLETED - FULLY IMPLEMENTED v1.1.0)
+### ✅ Phase 3: Bridge System (COMPLETED - FULLY IMPLEMENTED)
 
 - [x] Bridge connection infrastructure with permanent and scheduled modes
 - [x] Configuration management for bridges with cron scheduling
@@ -273,6 +256,7 @@ github.com/golang/mock       // Mock generation
 - [x] Bridge talker detection and routing (repeater ↔ bridge packet forwarding)
 - [x] Next schedule display with countdown timers
 - [x] Bridge context isolation (prevents bridge issues from affecting reflector)
+- [x] Comprehensive bridge event logging and debugging
 
 **Deliverables**: ✅ Complete bridge system with scheduling, health checks, and real-time monitoring
 
@@ -305,6 +289,7 @@ github.com/golang/mock       // Mock generation
 - [x] **Bridge Talker Detection**: Proper callsign extraction (gateway vs source) for bridge traffic
 - [x] **Bridge Context Isolation**: Independent contexts prevent bridge failures from affecting main reflector
 - [x] **Persistent Bridge Status**: Bridges remain visible in dashboard when disconnected, showing next schedule
+- [x] **Bridge Event Pipeline**: Complete event flow from bridge packets → WebSocket → dashboard updates
 
 ### Dashboard UI/UX Improvements
 
@@ -312,6 +297,7 @@ github.com/golang/mock       // Mock generation
 - [x] **Dark Mode Fixes**: Proper text contrast for badges and UI elements in dark mode
 - [x] **Bridge Status Cards**: Enhanced bridge display with state, schedule, duration, and countdowns
 - [x] **Real-time Updates**: Reliable WebSocket updates for bridge talkers and activity
+- [x] **Mobile Responsive**: Improved mobile navigation with hamburger menu
 
 ### Backend Improvements
 
@@ -320,7 +306,7 @@ github.com/golang/mock       // Mock generation
 - [x] **YSF Protocol Fixes**: Proper YSFD packet handling for gateway vs source callsigns
 - [x] **Schedule Management**: Automatic next-schedule calculation after bridge runs complete
 
-## 🎯 Future Roadmap
+## 🎯 Future Enhancements (Roadmap)
 
 ### Immediate Enhancements
 
@@ -340,20 +326,7 @@ github.com/golang/mock       // Mock generation
 - [ ] Manual unmute button and visual indicators for muted repeaters
 - [ ] Real-time charts for connection trends and talk activity
 
-**Current Status**: All core phases completed + Full bridge system. YSF Nexus is production-ready!
-
-## Linting & Code Quality
-
-We use `golangci-lint` as part of CI to ensure code quality and consistency. A GitHub Actions workflow runs `golangci-lint` on PRs and pushes. Please run `golangci-lint run ./...` locally and resolve any findings before pushing changes.
-
-## Concise Checklist (for reviewers / operators)
-
-- [x] Build the binary: make build
-- [x] Run with default config: ./bin/ysf-nexus
-- [x] Run tests: make test
-- [x] Confirm OpenSpot compatibility: e2e reflector test (accepts 4-byte YSFS probe)
-- [ ] Tune talk timeouts via config (server.talk_max_duration / server.unmute_after)
-- [ ] (Optional) Enable MQTT and web dashboard in `config.yaml`
+**Current Status**: All core phases completed + Full bridge system with scheduling. YSF Nexus is production-ready!
 
 ## Key Features
 
@@ -404,10 +377,10 @@ web:
 
 bridges:
   - name: "YSF001"
-    host: "ysf001.example.com"
-    port: 42000
-    schedule: "0 */6 * * *"  # Every 6 hours
-    duration: "1h"
+  host: "ysf001.example.com"
+  port: 42000
+  schedule: "0 */6 * * *"  # Every 6 hours
+  duration: "1h"
 
 mqtt:
   enabled: true
@@ -459,11 +432,10 @@ logging:
    - Real-time repeater status and talk logs
    - REST API for programmatic access
 
-5. ✅ **Automated bridge scheduling to other reflectors** - FULLY IMPLEMENTED (v1.1.0)
-   - Complete cron-based scheduling with duration support
-   - Bridge health checking and automatic reconnection
-   - Real-time status monitoring with countdowns
-   - Proper packet routing between repeaters and bridges
+5. ✅ **Automated bridge scheduling to other reflectors** - FRAMEWORK READY
+   - Bridge configuration system implemented
+   - Cron-based scheduling infrastructure exists
+   - Ready for full bridge implementation
 
 6. ✅ **MQTT integration for external systems** - ACHIEVED
    - Real-time event publishing (connect/disconnect/talk)
@@ -483,34 +455,85 @@ logging:
 
 **RESULT**: All success criteria met or exceeded! 🚀
 
-## CI/CD Pipeline (Dagger)
+## CI/CD Pipeline with Dagger
 
-### Quick CI Commands
+### Overview
+
+The project uses Dagger Go SDK for containerized, reproducible CI/CD pipelines that run identically in local development and GitHub Actions.
+
+### Dagger Implementation
+
+- **Location**: `dagger/main.go` - Complete Go SDK implementation
+- **Configuration**: `dagger.json` - Dagger engine v0.18.19 with Go SDK
+- **Container Base**: `golang:1.25` for consistent build environment
+
+### Available Dagger Functions
+
+#### Core Functions
 
 ```bash
-# Full pipeline (matches GitHub Actions exactly)
-dagger call ci --source=.
+# Test - Run all Go tests with dependency management
+dagger call test --source=.
 
-# Individual steps for fast feedback
-dagger call test --source=.    # Run Go tests
-dagger call lint --source=.    # golangci-lint
-dagger call vuln --source=.    # Security scan
-dagger call build --source=.   # Linux binary
+# Lint - Run comprehensive golangci-lint checks
+dagger call lint --source=.
+
+# Vuln - Security vulnerability scanning with govulncheck
+dagger call vuln --source=.
+
+# Build - Create optimized Linux binary
+dagger call build --source=.
+
+# CI - Complete pipeline (test + lint + vuln)
+dagger call ci --source=.
 ```
 
-### Implementation Details
+#### Pipeline Components
 
-- **Engine**: Dagger v0.18.19 with Go SDK (`dagger/main.go`)
-- **Base**: golang:1.25 container for consistency
-- **GitHub**: `.github/workflows/dagger-ci.yml` runs `dagger call ci`
-- **Results**: ✅ All tests pass, 0 lint issues, no vulnerabilities
-- **Speed**: ~2 minutes for complete pipeline with caching
+1. **Base Container**: Sets up Go 1.25 environment with source code
+2. **Test Suite**: Runs unit tests for all packages (config, network, reflector, repeater)
+3. **Linting**: golangci-lint with comprehensive rule set (0 issues required)
+4. **Vulnerability Scanning**: govulncheck for security analysis
+5. **Binary Build**: Cross-compiled Linux executable
 
-### Why Dagger?
+### Local Development Workflow
 
-- Same container environment locally and in CI
-- Go SDK code instead of brittle shell scripts
-- Intelligent caching and parallelization
-- `dagger call` locally = exact CI reproduction
+```bash
+# Validate changes locally (matches CI exactly)
+dagger call ci --source=.
 
-The containerized CI ensures code quality and provides fast developer feedback.
+# Run individual steps for faster feedback
+dagger call test --source=.
+dagger call lint --source=.
+
+# Build and test binary locally
+dagger call build --source=. export --path=./ysf-nexus-linux
+```
+
+### GitHub Actions Integration
+
+- **Workflow**: `.github/workflows/dagger-ci.yml`
+- **Trigger**: Push to any branch, pull requests
+- **Command**: `dagger call ci --source=.`
+- **Duration**: ~2 minutes for complete pipeline
+- **Status**: ✅ All runs passing successfully
+
+### Benefits of Dagger Approach
+
+- **Reproducibility**: Same container environment locally and in CI
+- **Speed**: Intelligent caching and parallelization
+- **Developer Experience**: `dagger call` locally matches CI exactly
+- **Maintainability**: Go code instead of shell scripts
+- **Portability**: Works on any Dagger-supported platform
+
+### CI Pipeline Results (Latest)
+
+```
+✅ Tests: All packages pass (config, network, reflector, repeater)
+✅ Linting: 0 issues found with golangci-lint
+✅ Security: No vulnerabilities detected
+✅ Build: Linux binary created successfully
+⏱️ Total time: ~2 minutes
+```
+
+This containerized CI approach ensures that the YSF Nexus project maintains high code quality and security standards while providing fast developer feedback loops.

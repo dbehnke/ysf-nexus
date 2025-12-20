@@ -1,9 +1,11 @@
 # YSF Reflector Go Implementation Project
 
 ## Project Overview
-Convert the C++ YSF (Yaesu System Fusion) Reflector from https://github.com/nostar/DVReflectors/tree/main/YSFReflector to a modern Go application with enhanced features for amateur radio digital voice communication.
+
+Convert the C++ YSF (Yaesu System Fusion) Reflector from <https://github.com/nostar/DVReflectors/tree/main/YSFReflector> to a modern Go application with enhanced features for amateur radio digital voice communication.
 
 ## Goals
+
 - **High Concurrency**: Handle ~200 simultaneous connections using Go's goroutines
 - **Easy Deployment**: Single binary with Docker support
 - **Comprehensive Testing**: Unit and integration tests
@@ -12,10 +14,16 @@ Convert the C++ YSF (Yaesu System Fusion) Reflector from https://github.com/nost
 - **MQTT Integration**: Real-time events for external systems
 - **Monolithic Binary**: All features in one executable
 
+## Development Rules
+
+- **TDD First**: Always create Test Driven Development (TDD) tests BEFORE writing any implementation code.
+
 ## YSF Protocol Analysis
+
 Based on the original C++ implementation:
 
 ### Core Protocol Features
+
 - **Transport**: UDP networking (IPv4/IPv6)
 - **Packet Types**:
   - `YSFP`: Poll/Registration packets
@@ -26,6 +34,7 @@ Based on the original C++ implementation:
 - **Data Flow**: Packet routing between connected repeaters
 
 ### Current C++ Architecture Limitations
+
 - Single-threaded event loop
 - Sequential I/O processing
 - Limited monitoring capabilities
@@ -37,6 +46,7 @@ Based on the original C++ implementation:
 ### Core Components
 
 #### 1. Network Layer (`pkg/network/`)
+
 ```go
 type UDPServer struct {
     conn        *net.UDPConn
@@ -53,6 +63,7 @@ type Packet struct {
 ```
 
 #### 2. Repeater Management (`pkg/repeater/`)
+
 ```go
 type Manager struct {
     repeaters   sync.Map              // thread-safe repeater storage
@@ -72,6 +83,7 @@ type Repeater struct {
 ```
 
 #### 3. Web Dashboard (`pkg/web/`)
+
 ```go
 type Dashboard struct {
     server      *http.Server
@@ -82,6 +94,7 @@ type Dashboard struct {
 ```
 
 #### 4. Bridge System (`pkg/bridge/`)
+
 ```go
 type Bridge struct {
     scheduler   *cron.Cron
@@ -91,6 +104,7 @@ type Bridge struct {
 ```
 
 #### 5. MQTT Client (`pkg/mqtt/`)
+
 ```go
 type Client struct {
     client   mqtt.Client
@@ -107,6 +121,7 @@ type Event struct {
 ```
 
 ### Concurrency Design
+
 - **Main UDP Listener**: Single goroutine for packet reception
 - **Packet Processors**: Worker pool for packet handling
 - **Repeater Timeout**: Background goroutine for cleanup
@@ -115,6 +130,7 @@ type Event struct {
 - **MQTT Publisher**: Dedicated goroutine for event publishing
 
 ## Project Structure
+
 ```
 ysf-reflector-go/
 ├── cmd/
@@ -181,6 +197,7 @@ ysf-reflector-go/
 ```
 
 ## Dependencies
+
 ```go
 // Core
 github.com/spf13/cobra        // CLI framework
@@ -206,6 +223,7 @@ github.com/golang/mock       // Mock generation
 ## Implementation Status
 
 ### ✅ Phase 1: Core Reflector (COMPLETED)
+
 - [x] Basic UDP server with YSF packet handling (YSFP/YSFU/YSFD/YSFS)
 - [x] Repeater connection management with thread-safe structures
 - [x] Packet routing between repeaters
@@ -219,6 +237,7 @@ github.com/golang/mock       // Mock generation
 **Deliverables**: ✅ Functional YSF reflector exceeding C++ behavior
 
 ### ✅ Phase 2: Enhanced Features (COMPLETED)
+
 - [x] Web dashboard with real-time monitoring (embedded static assets)
 - [x] REST API for status and configuration
 - [x] Metrics collection and basic statistics
@@ -228,6 +247,7 @@ github.com/golang/mock       // Mock generation
 **Deliverables**: ✅ Monitoring and management capabilities
 
 ### ✅ Phase 3: Bridge System (COMPLETED - FULLY IMPLEMENTED)
+
 - [x] Bridge connection infrastructure with permanent and scheduled modes
 - [x] Configuration management for bridges with cron scheduling
 - [x] Scheduled bridge support with duration-based connections
@@ -241,6 +261,7 @@ github.com/golang/mock       // Mock generation
 **Deliverables**: ✅ Complete bridge system with scheduling, health checks, and real-time monitoring
 
 ### ✅ Phase 4: MQTT Integration (COMPLETED)
+
 - [x] MQTT client with configurable broker
 - [x] Event publishing (connect/disconnect/talk events)
 - [x] Message formatting and QoS handling
@@ -249,6 +270,7 @@ github.com/golang/mock       // Mock generation
 **Deliverables**: ✅ External system integration via MQTT
 
 ### ✅ Phase 5: Production Readiness (COMPLETED)
+
 - [x] Docker containerization with compose files
 - [x] Performance optimization for concurrent connections
 - [x] Comprehensive testing (unit, integration, e2e reflector test)
@@ -261,6 +283,7 @@ github.com/golang/mock       // Mock generation
 ## 🎯 Recent Enhancements (v1.1.0)
 
 ### Bridge System Enhancements
+
 - [x] **Scheduled Bridge Support**: Full cron-based scheduling with duration limits
 - [x] **Bridge Countdown Timers**: Real-time countdown to next scheduled run and end time
 - [x] **Bridge Talker Detection**: Proper callsign extraction (gateway vs source) for bridge traffic
@@ -269,6 +292,7 @@ github.com/golang/mock       // Mock generation
 - [x] **Bridge Event Pipeline**: Complete event flow from bridge packets → WebSocket → dashboard updates
 
 ### Dashboard UI/UX Improvements
+
 - [x] **Collapsible Sidebar**: Desktop sidebar collapses to icon-only view for more dashboard space
 - [x] **Dark Mode Fixes**: Proper text contrast for badges and UI elements in dark mode
 - [x] **Bridge Status Cards**: Enhanced bridge display with state, schedule, duration, and countdowns
@@ -276,6 +300,7 @@ github.com/golang/mock       // Mock generation
 - [x] **Mobile Responsive**: Improved mobile navigation with hamburger menu
 
 ### Backend Improvements
+
 - [x] **Event Channel Reliability**: Goroutine-based event delivery with timeout protection
 - [x] **Comprehensive Logging**: Detailed Info-level logging for bridge operations and debugging
 - [x] **YSF Protocol Fixes**: Proper YSFD packet handling for gateway vs source callsigns
@@ -284,16 +309,19 @@ github.com/golang/mock       // Mock generation
 ## 🎯 Future Enhancements (Roadmap)
 
 ### Immediate Enhancements
+
 - [ ] Live configurability via web dashboard (tune talk_max_duration from UI)
 - [ ] CLI flags to override config file values at runtime
 - [ ] Manual bridge start/stop controls from dashboard
 
 ### Extended Features
+
 - [ ] Persistent event store (SQLite/PostgreSQL) for long-term analytics
 - [ ] Advanced bridge strategies (failover, load balancing)
 - [ ] Performance tuning for very large deployments (1k+ repeaters)
 
 ### UI/UX Improvements
+
 - [ ] Per-repeater controls in web dashboard
 - [ ] Manual unmute button and visual indicators for muted repeaters
 - [ ] Real-time charts for connection trends and talk activity
@@ -303,6 +331,7 @@ github.com/golang/mock       // Mock generation
 ## Key Features
 
 ### Web Dashboard
+
 - **Live Connection Monitor**: Real-time repeater status
 - **Talk Log**: History of transmissions with duration
 - **System Metrics**: Connection count, packet rates, uptime
@@ -310,6 +339,7 @@ github.com/golang/mock       // Mock generation
 - **Bridge Status**: Active bridge connections and schedules
 
 ### MQTT Events
+
 ```json
 {
   "type": "connect",
@@ -332,6 +362,7 @@ github.com/golang/mock       // Mock generation
 ```
 
 ### Configuration Example
+
 ```yaml
 server:
   host: "0.0.0.0"
@@ -364,6 +395,7 @@ logging:
 ```
 
 ## Testing Strategy
+
 - **Unit Tests**: All core components (>80% coverage)
 - **Integration Tests**: Network protocol compliance
 - **Load Tests**: 200+ concurrent connections
@@ -371,6 +403,7 @@ logging:
 - **Web Tests**: Dashboard functionality and API endpoints
 
 ## Performance Targets
+
 - **Connections**: Support 200+ simultaneous repeaters
 - **Latency**: <10ms packet routing
 - **Memory**: <100MB under full load
@@ -378,6 +411,7 @@ logging:
 - **Uptime**: 99.9% availability target
 
 ## Success Criteria
+
 1. ✅ **Functional parity with original C++ reflector** - ACHIEVED + EXCEEDED
    - Core YSF protocol support (YSFP/YSFU/YSFD/YSFS)
    - OpenSpot compatibility with 4-byte YSFS probes
@@ -424,9 +458,11 @@ logging:
 ## CI/CD Pipeline with Dagger
 
 ### Overview
+
 The project uses Dagger Go SDK for containerized, reproducible CI/CD pipelines that run identically in local development and GitHub Actions.
 
 ### Dagger Implementation
+
 - **Location**: `dagger/main.go` - Complete Go SDK implementation
 - **Configuration**: `dagger.json` - Dagger engine v0.18.19 with Go SDK
 - **Container Base**: `golang:1.25` for consistent build environment
@@ -434,6 +470,7 @@ The project uses Dagger Go SDK for containerized, reproducible CI/CD pipelines t
 ### Available Dagger Functions
 
 #### Core Functions
+
 ```bash
 # Test - Run all Go tests with dependency management
 dagger call test --source=.
@@ -452,6 +489,7 @@ dagger call ci --source=.
 ```
 
 #### Pipeline Components
+
 1. **Base Container**: Sets up Go 1.25 environment with source code
 2. **Test Suite**: Runs unit tests for all packages (config, network, reflector, repeater)
 3. **Linting**: golangci-lint with comprehensive rule set (0 issues required)
@@ -459,6 +497,7 @@ dagger call ci --source=.
 5. **Binary Build**: Cross-compiled Linux executable
 
 ### Local Development Workflow
+
 ```bash
 # Validate changes locally (matches CI exactly)
 dagger call ci --source=.
@@ -472,6 +511,7 @@ dagger call build --source=. export --path=./ysf-nexus-linux
 ```
 
 ### GitHub Actions Integration
+
 - **Workflow**: `.github/workflows/dagger-ci.yml`
 - **Trigger**: Push to any branch, pull requests
 - **Command**: `dagger call ci --source=.`
@@ -479,6 +519,7 @@ dagger call build --source=. export --path=./ysf-nexus-linux
 - **Status**: ✅ All runs passing successfully
 
 ### Benefits of Dagger Approach
+
 - **Reproducibility**: Same container environment locally and in CI
 - **Speed**: Intelligent caching and parallelization
 - **Developer Experience**: `dagger call` locally matches CI exactly
@@ -486,6 +527,7 @@ dagger call build --source=. export --path=./ysf-nexus-linux
 - **Portability**: Works on any Dagger-supported platform
 
 ### CI Pipeline Results (Latest)
+
 ```
 ✅ Tests: All packages pass (config, network, reflector, repeater)
 ✅ Linting: 0 issues found with golangci-lint
