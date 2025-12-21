@@ -43,11 +43,13 @@ type ManagerMetrics struct {
 
 // Event represents a repeater event
 type Event struct {
-	Type      string        `json:"type"`
-	Callsign  string        `json:"callsign"`
-	Address   string        `json:"address"`
-	Timestamp time.Time     `json:"timestamp"`
-	Duration  time.Duration `json:"duration,omitempty"`
+	Type           string        `json:"type"`
+	Callsign       string        `json:"callsign"` // Legacy field, same as SourceCallsign
+	SourceCallsign string        `json:"source_callsign"`
+	Gateway        string        `json:"gateway"`
+	Address        string        `json:"address"`
+	Timestamp      time.Time     `json:"timestamp"`
+	Duration       time.Duration `json:"duration,omitempty"`
 }
 
 // Event types
@@ -84,7 +86,7 @@ func (m *Manager) AddRepeater(callsign string, addr *net.UDPAddr) (*Repeater, bo
 	// Check blocklist
 	if m.blocklist.IsBlocked(callsign) {
 		m.metrics.BlockedConnections++
-		m.sendEvent(EventBlocked, callsign, addr.String(), 0)
+		m.sendEvent(EventBlocked, callsign, callsign, addr.String(), 0)
 		return nil, false
 	}
 
@@ -115,7 +117,7 @@ func (m *Manager) AddRepeater(callsign string, addr *net.UDPAddr) (*Repeater, bo
 	m.metrics.ActiveConnections++
 	m.mu.Unlock()
 
-	m.sendEvent(EventConnect, callsign, addr.String(), 0)
+	m.sendEvent(EventConnect, callsign, callsign, addr.String(), 0)
 	if m.logger != nil {
 		m.logger.Info("New repeater connected", logger.String("callsign", callsign), logger.String("from", addr.String()))
 	}
@@ -148,14 +150,14 @@ func (m *Manager) RemoveRepeater(addr *net.UDPAddr) bool {
 			m.activeMu.Unlock()
 			// Ensure unmuted
 			m.muted.Delete(addr.String())
-			m.sendEvent(EventTalkEnd, r.Callsign(), addr.String(), duration)
+			m.sendEvent(EventTalkEnd, r.Callsign(), r.Callsign(), addr.String(), duration)
 		}
 
 		m.mu.Lock()
 		m.metrics.ActiveConnections--
 		m.mu.Unlock()
 
-		m.sendEvent(EventDisconnect, r.Callsign(), addr.String(), 0)
+		m.sendEvent(EventDisconnect, r.Callsign(), r.Callsign(), addr.String(), 0)
 		if m.logger != nil {
 			m.logger.Info("Repeater disconnected", logger.String("callsign", r.Callsign()), logger.String("from", addr.String()), logger.String("uptime", r.Uptime().String()))
 		}
@@ -200,7 +202,7 @@ func (m *Manager) Count() int {
 }
 
 // ProcessPacket processes a packet and updates repeater state
-func (m *Manager) ProcessPacket(callsign string, addr *net.UDPAddr, packetType string, dataSize int) {
+func (m *Manager) ProcessPacket(sourceCallsign, gatewayCallsign string, addr *net.UDPAddr, packetType string, dataSize int) {
 	repeater := m.GetRepeater(addr)
 	if repeater == nil {
 		return
@@ -241,9 +243,9 @@ func (m *Manager) ProcessPacket(callsign string, addr *net.UDPAddr, packetType s
 			if !repeater.IsTalking() {
 				repeater.StartTalking()
 				m.activeKey = addr.String()
-				m.sendEvent(EventTalkStart, callsign, addr.String(), 0)
+				m.sendEvent(EventTalkStart, sourceCallsign, gatewayCallsign, addr.String(), 0)
 				if m.logger != nil {
-					m.logger.Info("Repeater started talking", logger.String("callsign", callsign))
+					m.logger.Info("Repeater started talking", logger.String("callsign", sourceCallsign), logger.String("gateway", gatewayCallsign))
 				}
 			} else {
 				// already talking
@@ -267,9 +269,9 @@ func (m *Manager) ProcessPacket(callsign string, addr *net.UDPAddr, packetType s
 				m.activeMu.Lock()
 				m.activeKey = ""
 				m.activeMu.Unlock()
-				m.sendEvent(EventTimeout, callsign, addr.String(), 0)
+				m.sendEvent(EventTimeout, sourceCallsign, gatewayCallsign, addr.String(), 0)
 				if m.logger != nil {
-					m.logger.Warn("Repeater muted after exceeding talk max duration", logger.String("callsign", callsign))
+					m.logger.Warn("Repeater muted after exceeding talk max duration", logger.String("callsign", sourceCallsign), logger.String("gateway", gatewayCallsign))
 				}
 			}
 		} else {
@@ -340,14 +342,14 @@ func (m *Manager) cleanupTimedOut() {
 				m.activeMu.Unlock()
 				// Unmute if previously muted
 				m.muted.Delete(addr.String())
-				m.sendEvent(EventTalkEnd, repeater.Callsign(), addr.String(), duration)
+				m.sendEvent(EventTalkEnd, repeater.Callsign(), repeater.Callsign(), addr.String(), duration)
 			}
 
 			m.mu.Lock()
 			m.metrics.TimeoutConnections++
 			m.mu.Unlock()
 
-			m.sendEvent(EventTimeout, repeater.Callsign(), addr.String(), 0)
+			m.sendEvent(EventTimeout, repeater.Callsign(), repeater.Callsign(), addr.String(), 0)
 		}
 		m.RemoveRepeater(addr)
 	}
@@ -388,7 +390,7 @@ func (m *Manager) checkTalkTimeouts() {
 					m.muted.Delete(addrStr)
 				}
 			}
-			m.sendEvent(EventTalkEnd, repeater.Callsign(), addrStr, duration)
+			m.sendEvent(EventTalkEnd, repeater.Callsign(), repeater.Callsign(), addrStr, duration)
 			if m.logger != nil {
 				m.logger.Info("Repeater stopped talking (timeout)", logger.String("callsign", repeater.Callsign()), logger.Duration("duration", duration))
 			}
@@ -474,17 +476,19 @@ func (m *Manager) DumpRepeaters() {
 }
 
 // sendEvent sends an event to the event channel
-func (m *Manager) sendEvent(eventType, callsign, address string, duration time.Duration) {
+func (m *Manager) sendEvent(eventType, sourceCallsign, gatewayCallsign, address string, duration time.Duration) {
 	if m.events == nil {
 		return
 	}
 
 	event := Event{
-		Type:      eventType,
-		Callsign:  callsign,
-		Address:   address,
-		Timestamp: time.Now(),
-		Duration:  duration,
+		Type:           eventType,
+		Callsign:       sourceCallsign,
+		SourceCallsign: sourceCallsign,
+		Gateway:        gatewayCallsign,
+		Address:        address,
+		Timestamp:      time.Now(),
+		Duration:       duration,
 	}
 
 	select {

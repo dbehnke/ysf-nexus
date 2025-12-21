@@ -37,12 +37,21 @@
           </div>
           <div>
             <div class="flex items-center space-x-2 mb-1">
-              <h3 class="text-xl font-bold text-gray-900 dark:text-white">{{ currentTalker.callsign }}</h3>
+              <h3 class="text-xl font-bold text-gray-900 dark:text-white">
+                {{ currentTalker.source_callsign || currentTalker.callsign }}
+              </h3>
               <span class="inline-flex items-center px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-medium">
                 {{ currentTalker.type === 'bridge' ? 'Bridge' : 'Repeater' }}
               </span>
             </div>
-            <p class="text-sm text-gray-600 dark:text-gray-400">{{ currentTalker.address }}</p>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+              <span v-if="currentTalker.gateway && currentTalker.gateway !== (currentTalker.source_callsign || currentTalker.callsign)">
+                via {{ currentTalker.gateway }}
+              </span>
+              <span v-else>
+                {{ currentTalker.address }}
+              </span>
+            </p>
           </div>
         </div>
         <div class="flex items-center space-x-4">
@@ -155,7 +164,12 @@
             <div class="flex items-center space-x-3">
               <div class="w-2 h-2 bg-success-500 rounded-full"></div>
               <div>
-                <p class="font-medium text-gray-900 dark:text-white">{{ log.callsign }}</p>
+                <p class="font-medium text-gray-900 dark:text-white">
+                  {{ log.source_callsign || log.callsign }}
+                  <span v-if="log.gateway && log.gateway !== (log.source_callsign || log.callsign)" class="text-xs text-gray-400 dark:text-gray-500 ml-1">
+                    via {{ log.gateway }}
+                  </span>
+                </p>
                 <p class="text-sm text-gray-500 dark:text-gray-400">{{ formatTimeAgo(log.timestamp) }}</p>
               </div>
             </div>
