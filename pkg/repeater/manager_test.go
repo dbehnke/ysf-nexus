@@ -40,7 +40,7 @@ func TestSingleActiveStreamEnforcement(t *testing.T) {
 	}
 
 	// Stop r1 by directly stopping talking (manager will clear activeKey when it observes the stop via timeouts).
-	_ = r1.StopTalking()
+	_, _ = r1.StopTalking()
 
 	// For unit test determinism, clear activeKey to simulate manager recognizing the stop
 	m.ClearActive()

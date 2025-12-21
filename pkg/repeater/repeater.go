@@ -131,17 +131,18 @@ func (r *Repeater) UpdateTalkData() {
 	}
 }
 
-// StopTalking marks the repeater as stopping to talk and returns the talk duration
-func (r *Repeater) StopTalking() time.Duration {
+// StopTalking marks the repeater as stopping to talk and returns the talk duration and last source callsign
+func (r *Repeater) StopTalking() (time.Duration, string) {
 	if r.talkStart == nil {
-		return 0
+		return 0, ""
 	}
 
 	duration := time.Since(*r.talkStart)
+	lastSource := r.sourceCallsign
 	r.talkStart = nil
 	r.lastTalkData = nil
 	r.sourceCallsign = ""
-	return duration
+	return duration, lastSource
 }
 
 // IsTalkTimedOut checks if the talk session has timed out

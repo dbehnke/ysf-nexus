@@ -89,7 +89,7 @@ func TestRepeaterTalkState(t *testing.T) {
 	}
 
 	// Stop talking
-	stopDuration := rep.StopTalking()
+	stopDuration, _ := rep.StopTalking()
 	if rep.IsTalking() {
 		t.Errorf("Expected repeater to not be talking after StopTalking()")
 	}

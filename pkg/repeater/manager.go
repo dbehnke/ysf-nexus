@@ -141,7 +141,7 @@ func (m *Manager) RemoveRepeater(addr *net.UDPAddr) bool {
 
 		// Stop talking if active
 		if r.IsTalking() {
-			duration := r.StopTalking()
+			duration, source := r.StopTalking()
 			// Clear activeKey if this was active
 			m.activeMu.Lock()
 			if m.activeKey == addr.String() {
@@ -150,7 +150,7 @@ func (m *Manager) RemoveRepeater(addr *net.UDPAddr) bool {
 			m.activeMu.Unlock()
 			// Ensure unmuted
 			m.muted.Delete(addr.String())
-			m.sendEvent(EventTalkEnd, r.Callsign(), r.Callsign(), addr.String(), duration)
+			m.sendEvent(EventTalkEnd, source, r.Callsign(), addr.String(), duration)
 		}
 
 		m.mu.Lock()
@@ -259,7 +259,7 @@ func (m *Manager) ProcessPacket(sourceCallsign, gatewayCallsign string, addr *ne
 			// If they've been talking too long, mute them
 			if repeater.TalkDuration() > m.talkMaxDuration {
 				// mute and stop talking
-				repeater.StopTalking()
+				_, _ = repeater.StopTalking() // EventTimeout is sent below manually
 				// compute unmute time (zero means muted until they stop)
 				var unmuteUntil time.Time
 				if m.unmuteAfter > 0 {
@@ -333,7 +333,7 @@ func (m *Manager) cleanupTimedOut() {
 		if repeater := m.GetRepeater(addr); repeater != nil {
 			// Handle ongoing talk
 			if repeater.IsTalking() {
-				duration := repeater.StopTalking()
+				duration, source := repeater.StopTalking()
 				// If this was the active repeater, clear activeKey
 				m.activeMu.Lock()
 				if m.activeKey == addr.String() {
@@ -342,7 +342,7 @@ func (m *Manager) cleanupTimedOut() {
 				m.activeMu.Unlock()
 				// Unmute if previously muted
 				m.muted.Delete(addr.String())
-				m.sendEvent(EventTalkEnd, repeater.Callsign(), repeater.Callsign(), addr.String(), duration)
+				m.sendEvent(EventTalkEnd, source, repeater.Callsign(), addr.String(), duration)
 			}
 
 			m.mu.Lock()
@@ -367,7 +367,7 @@ func (m *Manager) checkTalkTimeouts() {
 	m.repeaters.Range(func(key, value interface{}) bool {
 		repeater := value.(*Repeater)
 		if repeater.IsTalkTimedOut(talkTimeout) {
-			duration := repeater.StopTalking()
+			duration, source := repeater.StopTalking()
 			// Clear activeKey if this was active
 			addrStr := repeater.Address().String()
 			m.activeMu.Lock()
@@ -390,7 +390,7 @@ func (m *Manager) checkTalkTimeouts() {
 					m.muted.Delete(addrStr)
 				}
 			}
-			m.sendEvent(EventTalkEnd, repeater.Callsign(), repeater.Callsign(), addrStr, duration)
+			m.sendEvent(EventTalkEnd, source, repeater.Callsign(), addrStr, duration)
 			if m.logger != nil {
 				m.logger.Info("Repeater stopped talking (timeout)", logger.String("callsign", repeater.Callsign()), logger.Duration("duration", duration))
 			}
