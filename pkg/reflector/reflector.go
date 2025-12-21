@@ -285,7 +285,7 @@ func (r *Reflector) handlePollPacket(packet *network.Packet) error {
 	}
 
 	// Process packet for statistics
-	r.repeaterManager.ProcessPacket(packet.Callsign, packet.Source, packet.Type, len(packet.Data))
+	r.repeaterManager.ProcessPacket(packet.Callsign, packet.Callsign, packet.Source, packet.Type, len(packet.Data))
 
 	// Send poll response
 	response := network.CreatePollResponse()
@@ -303,14 +303,15 @@ func (r *Reflector) handlePollPacket(packet *network.Packet) error {
 // handleDataPacket handles YSFD (data) packets
 func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 	// Use source callsign if available (actual transmitter), otherwise gateway callsign
-	effectiveCallsign := packet.Callsign
+	sourceCallsign := packet.Callsign
 	if packet.SourceCS != "" {
-		effectiveCallsign = packet.SourceCS
+		sourceCallsign = packet.SourceCS
 	}
+	gatewayCallsign := packet.Callsign
 
 	r.logger.Debug("Received data packet",
-		logger.String("gateway", packet.Callsign),
-		logger.String("source_cs", effectiveCallsign),
+		logger.String("gateway", gatewayCallsign),
+		logger.String("source_cs", sourceCallsign),
 		logger.String("dest_cs", packet.DestCS),
 		logger.String("addr", packet.Source.String()),
 		logger.Uint32("sequence", packet.GetSequence()))
@@ -321,8 +322,8 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 	// Handle bridge data packets differently
 	if r.bridgeManager.IsBridgeAddress(packet.Source) {
 		r.logger.Debug("Received data from bridge connection",
-			logger.String("gateway", packet.Callsign),
-			logger.String("source_cs", effectiveCallsign),
+			logger.String("gateway", gatewayCallsign),
+			logger.String("source_cs", sourceCallsign),
 			logger.String("addr", packet.Source.String()))
 
 		// Track bridge talker activity
@@ -357,14 +358,14 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 	rep := r.repeaterManager.GetRepeater(packet.Source)
 	if rep == nil {
 		r.logger.Warn("Data packet from unregistered repeater",
-			logger.String("gateway", packet.Callsign),
-			logger.String("source_cs", effectiveCallsign),
+			logger.String("gateway", gatewayCallsign),
+			logger.String("source_cs", sourceCallsign),
 			logger.String("addr", packet.Source.String()))
 		return nil
 	}
 
 	// Process packet for statistics and state tracking using the effective callsign
-	r.repeaterManager.ProcessPacket(effectiveCallsign, packet.Source, packet.Type, len(packet.Data))
+	r.repeaterManager.ProcessPacket(sourceCallsign, gatewayCallsign, packet.Source, packet.Type, len(packet.Data))
 
 	// Sanitize callsigns in the packet before broadcasting
 	sanitizedData := network.SanitizeDataPacket(packet.Data)
@@ -373,7 +374,7 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 	addresses := r.repeaterManager.GetAllAddresses()
 	if err := r.server.BroadcastData(sanitizedData, addresses, packet.Source); err != nil {
 		r.logger.Error("Failed to broadcast data packet",
-			logger.String("source_cs", effectiveCallsign),
+			logger.String("source_cs", sourceCallsign),
 			logger.Error(err))
 		return err
 	}
@@ -387,7 +388,7 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 
 	// Forward local repeater traffic to all bridges (bidirectional bridge forwarding)
 	// Use already sanitized data to avoid sending suffixes to bridges
-	r.forwardToBridges(sanitizedData, effectiveCallsign)
+	r.forwardToBridges(sanitizedData, sourceCallsign)
 
 	return nil
 }
@@ -395,25 +396,26 @@ func (r *Reflector) handleDataPacket(packet *network.Packet) error {
 // processBridgeTalker tracks bridge talker state and sends events
 func (r *Reflector) processBridgeTalker(packet *network.Packet) {
 	// Use source callsign if available (actual transmitter), otherwise gateway callsign
-	effectiveCallsign := packet.Callsign
+	sourceCallsign := packet.Callsign
 	if packet.SourceCS != "" {
-		effectiveCallsign = packet.SourceCS
+		sourceCallsign = packet.SourceCS
 	}
+	gatewayCallsign := packet.Callsign
 
 	// Entry trace
 	r.logger.Info("processBridgeTalker ENTRY",
-		logger.String("gateway", packet.Callsign),
-		logger.String("source_cs", effectiveCallsign),
+		logger.String("gateway", gatewayCallsign),
+		logger.String("source_cs", sourceCallsign),
 		logger.String("addr", packet.Source.String()),
 		logger.Uint32("sequence", packet.GetSequence()))
 
 	defer func() {
 		r.logger.Info("processBridgeTalker EXIT",
-			logger.String("source_cs", effectiveCallsign),
+			logger.String("source_cs", sourceCallsign),
 			logger.String("addr", packet.Source.String()))
 	}()
 
-	if effectiveCallsign == "" {
+	if sourceCallsign == "" {
 		r.logger.Info("processBridgeTalker: empty callsign, returning early")
 		return
 	}
@@ -429,7 +431,7 @@ func (r *Reflector) processBridgeTalker(packet *network.Packet) {
 			logger.String("bridge_name", bridgeName))
 	}
 
-	talkerKey := effectiveCallsign + ":" + bridgeName
+	talkerKey := sourceCallsign + ":" + bridgeName
 	sequence := packet.GetSequence()
 	now := time.Now()
 
@@ -445,7 +447,7 @@ func (r *Reflector) processBridgeTalker(packet *network.Packet) {
 	if !exists {
 		// New talker
 		talker = &bridgeTalker{
-			callsign:     effectiveCallsign,
+			callsign:     sourceCallsign,
 			bridgeName:   bridgeName,
 			bridgeAddr:   packet.Source.String(),
 			startTime:    now,
@@ -457,20 +459,20 @@ func (r *Reflector) processBridgeTalker(packet *network.Packet) {
 
 		// Send talk start event
 		r.logger.Info("processBridgeTalker: new talker detected",
-			logger.String("callsign", effectiveCallsign),
+			logger.String("callsign", sourceCallsign),
 			logger.String("bridge", bridgeName),
 			logger.String("addr", packet.Source.String()),
 			logger.Uint32("sequence", sequence))
 
-		r.sendBridgeEvent(repeater.EventTalkStart, effectiveCallsign, bridgeName, 0)
+		r.sendBridgeEvent(repeater.EventTalkStart, sourceCallsign, bridgeName, bridgeName, 0)
 
 		r.logger.Info("Bridge talker started",
-			logger.String("callsign", effectiveCallsign),
+			logger.String("callsign", sourceCallsign),
 			logger.String("bridge", bridgeName))
 	} else {
 		// Existing talker - update last seen
 		r.logger.Info("processBridgeTalker: existing talker update",
-			logger.String("callsign", effectiveCallsign),
+			logger.String("callsign", sourceCallsign),
 			logger.String("bridge", bridgeName),
 			logger.Uint32("sequence", sequence),
 			logger.Uint32("last_sequence", talker.lastSequence))
@@ -536,26 +538,28 @@ func (r *Reflector) getBridgeNameByAddress(addr string) (result string) {
 }
 
 // sendBridgeEvent sends an event to the event channel for bridge activities
-func (r *Reflector) sendBridgeEvent(eventType, callsign, bridgeIdentifier string, duration time.Duration) {
+func (r *Reflector) sendBridgeEvent(eventType, sourceCallsign, gatewayCallsign, bridgeIdentifier string, duration time.Duration) {
 	if r.eventChan == nil {
 		r.logger.Warn("sendBridgeEvent: eventChan is nil",
 			logger.String("event_type", eventType),
-			logger.String("callsign", callsign),
+			logger.String("callsign", sourceCallsign),
 			logger.String("bridge", bridgeIdentifier))
 		return
 	}
 
 	event := repeater.Event{
-		Type:      eventType,
-		Callsign:  callsign,
-		Address:   bridgeIdentifier, // Use bridge name/identifier as address
-		Timestamp: time.Now(),
-		Duration:  duration,
+		Type:           eventType,
+		Callsign:       sourceCallsign,
+		SourceCallsign: sourceCallsign,
+		Gateway:        gatewayCallsign,
+		Address:        bridgeIdentifier, // Use bridge name/identifier as address
+		Timestamp:      time.Now(),
+		Duration:       duration,
 	}
 
 	r.logger.Info("sendBridgeEvent: attempting to send",
 		logger.String("event_type", eventType),
-		logger.String("callsign", callsign),
+		logger.String("callsign", sourceCallsign),
 		logger.String("bridge", bridgeIdentifier),
 		logger.Int("channel_len", len(r.eventChan)),
 		logger.Int("channel_cap", cap(r.eventChan)))
@@ -567,13 +571,13 @@ func (r *Reflector) sendBridgeEvent(eventType, callsign, bridgeIdentifier string
 		case r.eventChan <- event:
 			r.logger.Info("sendBridgeEvent: event enqueued successfully",
 				logger.String("event_type", eventType),
-				logger.String("callsign", callsign),
+				logger.String("callsign", sourceCallsign),
 				logger.String("bridge", bridgeIdentifier))
 		case <-time.After(1 * time.Second):
 			// If we can't send within 1 second, something is wrong with the event consumer
 			r.logger.Error("sendBridgeEvent: TIMEOUT sending event after 1s",
 				logger.String("event_type", eventType),
-				logger.String("callsign", callsign),
+				logger.String("callsign", sourceCallsign),
 				logger.String("bridge", bridgeIdentifier),
 				logger.Int("channel_len", len(r.eventChan)),
 				logger.Int("channel_cap", cap(r.eventChan)))
@@ -611,7 +615,7 @@ func (r *Reflector) checkBridgeTalkerTimeouts() {
 			talker.isTalking = false
 
 			// Send talk end event
-			r.sendBridgeEvent(repeater.EventTalkEnd, talker.callsign, talker.bridgeName, duration)
+			r.sendBridgeEvent(repeater.EventTalkEnd, talker.callsign, talker.bridgeName, talker.bridgeName, duration)
 
 			r.logger.Info("Bridge talker ended",
 				logger.String("callsign", talker.callsign),

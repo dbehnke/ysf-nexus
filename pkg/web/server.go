@@ -58,10 +58,12 @@ type Server struct {
 
 // TalkLogEntry represents a talk log entry
 type TalkLogEntry struct {
-	ID        int64     `json:"id"`
-	Callsign  string    `json:"callsign"`
-	Duration  int       `json:"duration"` // in seconds
-	Timestamp time.Time `json:"timestamp"`
+	ID             int64     `json:"id"`
+	Callsign       string    `json:"callsign"` // Legacy field, same as SourceCallsign
+	SourceCallsign string    `json:"source_callsign"`
+	Gateway        string    `json:"gateway"`
+	Duration       int       `json:"duration"` // in seconds
+	Timestamp      time.Time `json:"timestamp"`
 }
 
 // WebSocketHub manages WebSocket connections
@@ -309,10 +311,12 @@ func (s *Server) handleEvent(event repeater.Event) {
 		// Add to talk logs
 		s.mu.Lock()
 		entry := TalkLogEntry{
-			ID:        time.Now().UnixNano(),
-			Callsign:  event.Callsign,
-			Duration:  int(event.Duration.Seconds()),
-			Timestamp: event.Timestamp,
+			ID:             time.Now().UnixNano(),
+			Callsign:       event.SourceCallsign,
+			SourceCallsign: event.SourceCallsign,
+			Gateway:        event.Gateway,
+			Duration:       int(event.Duration.Seconds()),
+			Timestamp:      event.Timestamp,
 		}
 		s.talkLogs = append([]TalkLogEntry{entry}, s.talkLogs...)
 
@@ -324,14 +328,18 @@ func (s *Server) handleEvent(event repeater.Event) {
 
 		// Broadcast via WebSocket
 		s.broadcastWebSocketMessage("talk_end", map[string]interface{}{
-			"callsign": event.Callsign,
-			"duration": int(event.Duration.Seconds()),
+			"callsign":        event.SourceCallsign,
+			"source_callsign": event.SourceCallsign,
+			"gateway":         event.Gateway,
+			"duration":        int(event.Duration.Seconds()),
 		})
 
 	case repeater.EventTalkStart:
 		s.broadcastWebSocketMessage("talk_start", map[string]interface{}{
-			"callsign":  event.Callsign,
-			"timestamp": event.Timestamp,
+			"callsign":        event.SourceCallsign,
+			"source_callsign": event.SourceCallsign,
+			"gateway":         event.Gateway,
+			"timestamp":       event.Timestamp,
 		})
 
 	case repeater.EventConnect:
@@ -601,11 +609,13 @@ func (s *Server) handleCurrentTalker(w http.ResponseWriter, r *http.Request) {
 			// Found a regular repeater that's talking
 			response := map[string]interface{}{
 				"current_talker": map[string]interface{}{
-					"callsign":      repeater.Callsign,
-					"address":       repeater.Address,
-					"type":          "repeater",
-					"is_talking":    true,
-					"talk_duration": repeater.TalkDuration,
+					"callsign":        repeater.Callsign,
+					"source_callsign": repeater.SourceCallsign,
+					"gateway":         repeater.Callsign,
+					"address":         repeater.Address,
+					"type":            "repeater",
+					"is_talking":      true,
+					"talk_duration":   repeater.TalkDuration,
 				},
 			}
 			if err := json.NewEncoder(w).Encode(response); err != nil {
@@ -640,11 +650,13 @@ func (s *Server) handleCurrentTalker(w http.ResponseWriter, r *http.Request) {
 					}); ok {
 						response := map[string]interface{}{
 							"current_talker": map[string]interface{}{
-								"callsign":      bt.GetCallsign(),
-								"address":       bt.GetBridgeName(), // Show bridge name as "address"
-								"type":          "bridge",
-								"is_talking":    true,
-								"talk_duration": int(bt.GetTalkDuration().Seconds()),
+								"callsign":        bt.GetCallsign(),
+								"source_callsign": bt.GetCallsign(),
+								"gateway":         bt.GetBridgeName(),
+								"address":         bt.GetBridgeName(), // Show bridge name as "address"
+								"type":            "bridge",
+								"is_talking":      true,
+								"talk_duration":   int(bt.GetTalkDuration().Seconds()),
 							},
 						}
 						if err := json.NewEncoder(w).Encode(response); err != nil {
@@ -764,6 +776,52 @@ func (s *Server) sendInitialData(conn *websocket.Conn) {
 	s.sendWebSocketMessage(conn, "repeaters_update", map[string]interface{}{
 		"repeaters": stats.Repeaters,
 	})
+
+	// Send current talker state
+	var currentTalker interface{}
+	// Check repeaters first
+	for _, r := range stats.Repeaters {
+		if r.IsTalking {
+			currentTalker = map[string]interface{}{
+				"callsign":        r.Callsign,
+				"source_callsign": r.SourceCallsign,
+				"gateway":         r.Callsign,
+				"address":         r.Address,
+				"type":            "repeater",
+				"is_talking":      true,
+				"talk_duration":   r.TalkDuration,
+			}
+			break
+		}
+	}
+
+	// Check bridge talkers if no repeater talking
+	if currentTalker == nil && s.reflector != nil {
+		if refl, ok := s.reflector.(interface{ GetCurrentBridgeTalker() interface{} }); ok {
+			bridgeTalker := refl.GetCurrentBridgeTalker()
+			if bridgeTalker != nil {
+				if bt, ok := bridgeTalker.(interface {
+					GetCallsign() string
+					GetBridgeName() string
+					GetTalkDuration() time.Duration
+				}); ok {
+					currentTalker = map[string]interface{}{
+						"callsign":        bt.GetCallsign(),
+						"source_callsign": bt.GetCallsign(),
+						"gateway":         bt.GetBridgeName(),
+						"address":         bt.GetBridgeName(),
+						"type":            "bridge",
+						"is_talking":      true,
+						"talk_duration":   int(bt.GetTalkDuration().Seconds()),
+					}
+				}
+			}
+		}
+	}
+
+	if currentTalker != nil {
+		s.sendWebSocketMessage(conn, "current_talker_update", currentTalker)
+	}
 }
 
 func (s *Server) sendWebSocketMessage(conn *websocket.Conn, messageType string, data interface{}) {

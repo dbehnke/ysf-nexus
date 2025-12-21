@@ -84,16 +84,16 @@ export const useDashboardStore = defineStore('dashboard', () => {
       console.log('Fetching current talker...')
       const response = await axios.get('/api/current-talker')
       console.log('Current talker response:', response.data)
-      
+
       if (response.data.current_talker) {
         const talker = response.data.current_talker
         console.log('Setting current talker:', talker)
-        
+
         // If it's a different talker, update currentTalker
-        if (!currentTalker.value || 
-            currentTalker.value.callsign !== talker.callsign ||
-            currentTalker.value.address !== talker.address ||
-            currentTalker.value.type !== talker.type) {
+        if (!currentTalker.value ||
+          currentTalker.value.callsign !== talker.callsign ||
+          currentTalker.value.address !== talker.address ||
+          currentTalker.value.type !== talker.type) {
           currentTalker.value = {
             ...talker,
             talk_start_time: new Date(Date.now() - (talker.talk_duration * 1000))
@@ -169,12 +169,40 @@ export const useDashboardStore = defineStore('dashboard', () => {
         stats.value = { ...stats.value, ...data.data }
         break
 
+      case 'repeaters_update':
+        // Full state sync
+        if (data.data.repeaters) {
+          repeaters.value = data.data.repeaters.map(r => ({
+            ...r,
+            talk_start_time: r.is_talking ? new Date(Date.now() - (r.talk_duration * 1000)) : null
+          }))
+        }
+        break
+
       case 'repeater_update':
         const index = repeaters.value.findIndex(r => r.callsign === data.data.callsign && r.address === data.data.address)
         if (index !== -1) {
-          repeaters.value[index] = { ...repeaters.value[index], ...data.data }
+          // If talk state changed to talking, estimate start time for count-up
+          const wasTalking = repeaters.value[index].is_talking
+          const isTalking = data.data.is_talking
+          let talk_start_time = repeaters.value[index].talk_start_time
+
+          if (isTalking && !wasTalking) {
+            talk_start_time = new Date(Date.now() - (data.data.talk_duration * 1000))
+          } else if (!isTalking) {
+            talk_start_time = null
+          }
+
+          repeaters.value[index] = {
+            ...repeaters.value[index],
+            ...data.data,
+            talk_start_time
+          }
         } else {
-          repeaters.value.push(data.data)
+          repeaters.value.push({
+            ...data.data,
+            talk_start_time: data.data.is_talking ? new Date(Date.now() - (data.data.talk_duration * 1000)) : null
+          })
         }
         break
 
@@ -202,7 +230,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         } else {
           startTalker = repeaters.value.find(r => r.callsign === data.data.callsign)
         }
-        
+
         if (startTalker) {
           startTalker.is_talking = true
           startTalker.talk_start_time = new Date(data.data.timestamp)
@@ -212,6 +240,18 @@ export const useDashboardStore = defineStore('dashboard', () => {
         fetchCurrentTalker()
         startTalkUpdateTimer()
         startFastStatsTimer()
+        break
+
+      case 'current_talker_update':
+        // Handle immediate state on connection
+        if (data.data) {
+          currentTalker.value = {
+            ...data.data,
+            talk_start_time: new Date(Date.now() - (data.data.talk_duration * 1000))
+          }
+          startTalkUpdateTimer()
+          startFastStatsTimer()
+        }
         break
 
       case 'talk_end':
@@ -276,7 +316,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         const durationMs = now - currentTalker.value.talk_start_time
         currentTalker.value.talk_duration = Math.floor(durationMs / 1000)
       }
-      
+
       // Update repeater talk durations for any active repeaters
       repeaters.value.forEach(repeater => {
         if (repeater.is_talking && repeater.talk_start_time) {

@@ -157,7 +157,10 @@
               <td class="table-cell">
                 <div class="flex items-center">
                   <div class="w-2 h-2 bg-success-500 rounded-full mr-3"></div>
-                  <div class="text-sm font-medium text-gray-900 dark:text-white">{{ log.callsign }}</div>
+                  <div>
+                    <div class="text-sm font-medium text-gray-900 dark:text-white">{{ log.source_callsign || log.callsign }}</div>
+                    <div v-if="log.gateway && log.gateway !== (log.source_callsign || log.callsign)" class="text-xs text-gray-500 dark:text-gray-400">via {{ log.gateway }}</div>
+                  </div>
                 </div>
               </td>
               <td class="table-cell">
@@ -299,7 +302,8 @@ export default {
 
     const exportLogs = () => {
       const data = filteredLogs.value.map(log => ({
-        Callsign: log.callsign,
+        Callsign: log.source_callsign || log.callsign,
+        Gateway: log.gateway !== (log.source_callsign || log.callsign) ? log.gateway : '',
         'Start Time': formatDateTime(log.timestamp),
         'Duration (seconds)': log.duration,
         'Duration (formatted)': store.formatDuration(log.duration)

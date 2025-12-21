@@ -17,16 +17,17 @@ func maskIPAddress(address string) string {
 
 // Repeater represents a connected YSF repeater
 type Repeater struct {
-	callsign     string
-	address      *net.UDPAddr
-	connected    time.Time
-	lastSeen     time.Time
-	talkStart    *time.Time
-	lastTalkData *time.Time // Last time we received a data packet while talking
-	packetCount  uint64
-	bytesRx      uint64
-	bytesTx      uint64
-	isActive     bool
+	callsign       string
+	sourceCallsign string // Callsign of the current talker (source)
+	address        *net.UDPAddr
+	connected      time.Time
+	lastSeen       time.Time
+	talkStart      *time.Time
+	lastTalkData   *time.Time // Last time we received a data packet while talking
+	packetCount    uint64
+	bytesRx        uint64
+	bytesTx        uint64
+	isActive       bool
 }
 
 // NewRepeater creates a new repeater instance
@@ -115,10 +116,11 @@ func (r *Repeater) AddBytesTransmitted(bytes uint64) {
 }
 
 // StartTalking marks the repeater as starting to talk
-func (r *Repeater) StartTalking() {
+func (r *Repeater) StartTalking(sourceCallsign string) {
 	now := time.Now()
 	r.talkStart = &now
 	r.lastTalkData = &now
+	r.sourceCallsign = sourceCallsign
 }
 
 // UpdateTalkData updates the last talk data timestamp
@@ -129,16 +131,18 @@ func (r *Repeater) UpdateTalkData() {
 	}
 }
 
-// StopTalking marks the repeater as stopping to talk and returns the talk duration
-func (r *Repeater) StopTalking() time.Duration {
+// StopTalking marks the repeater as stopping to talk and returns the talk duration and last source callsign
+func (r *Repeater) StopTalking() (time.Duration, string) {
 	if r.talkStart == nil {
-		return 0
+		return 0, ""
 	}
 
 	duration := time.Since(*r.talkStart)
+	lastSource := r.sourceCallsign
 	r.talkStart = nil
 	r.lastTalkData = nil
-	return duration
+	r.sourceCallsign = ""
+	return duration, lastSource
 }
 
 // IsTalkTimedOut checks if the talk session has timed out
@@ -168,6 +172,7 @@ func (r *Repeater) Uptime() time.Duration {
 func (r *Repeater) Stats() RepeaterStats {
 	return RepeaterStats{
 		Callsign:         r.callsign,
+		SourceCallsign:   r.sourceCallsign,
 		Address:          maskIPAddress(r.address.String()),
 		Connected:        r.connected,
 		LastSeen:         r.lastSeen,
@@ -184,6 +189,7 @@ func (r *Repeater) Stats() RepeaterStats {
 // RepeaterStats represents repeater statistics
 type RepeaterStats struct {
 	Callsign         string    `json:"callsign"`
+	SourceCallsign   string    `json:"source_callsign"`
 	Address          string    `json:"address"`
 	Connected        time.Time `json:"connected"`
 	LastSeen         time.Time `json:"last_seen"`
