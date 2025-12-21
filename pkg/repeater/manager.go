@@ -241,7 +241,7 @@ func (m *Manager) ProcessPacket(sourceCallsign, gatewayCallsign string, addr *ne
 		if currentActive == "" {
 			// no active repeater yet
 			if !repeater.IsTalking() {
-				repeater.StartTalking()
+				repeater.StartTalking(sourceCallsign)
 				m.activeKey = addr.String()
 				m.sendEvent(EventTalkStart, sourceCallsign, gatewayCallsign, addr.String(), 0)
 				if m.logger != nil {

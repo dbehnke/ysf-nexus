@@ -609,8 +609,8 @@ func (s *Server) handleCurrentTalker(w http.ResponseWriter, r *http.Request) {
 			// Found a regular repeater that's talking
 			response := map[string]interface{}{
 				"current_talker": map[string]interface{}{
-					"callsign":        repeater.Callsign, // Repeater callsign is speaker for local
-					"source_callsign": repeater.Callsign,
+					"callsign":        repeater.Callsign,
+					"source_callsign": repeater.SourceCallsign,
 					"gateway":         repeater.Callsign,
 					"address":         repeater.Address,
 					"type":            "repeater",
@@ -784,7 +784,7 @@ func (s *Server) sendInitialData(conn *websocket.Conn) {
 		if r.IsTalking {
 			currentTalker = map[string]interface{}{
 				"callsign":        r.Callsign,
-				"source_callsign": r.Callsign,
+				"source_callsign": r.SourceCallsign,
 				"gateway":         r.Callsign,
 				"address":         r.Address,
 				"type":            "repeater",

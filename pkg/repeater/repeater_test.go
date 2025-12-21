@@ -76,7 +76,7 @@ func TestRepeaterTalkState(t *testing.T) {
 	}
 
 	// Start talking
-	rep.StartTalking()
+	rep.StartTalking("W1ABC")
 	if !rep.IsTalking() {
 		t.Errorf("Expected repeater to be talking after StartTalking()")
 	}
@@ -134,7 +134,7 @@ func TestRepeaterStats(t *testing.T) {
 	rep := NewRepeater(callsign, addr)
 	rep.IncrementPacketCount()
 	rep.AddBytesReceived(100)
-	rep.StartTalking()
+	rep.StartTalking("W1ABC")
 
 	stats := rep.Stats()
 
@@ -182,7 +182,7 @@ func TestRepeaterString(t *testing.T) {
 	}
 
 	// Test talking state
-	rep.StartTalking()
+	rep.StartTalking("W1ABC")
 	talkingStr := rep.String()
 	if !containsString(talkingStr, "talking") {
 		t.Errorf("String representation should indicate talking state")
