@@ -180,3 +180,56 @@ func containsSubstr(s, substr string) bool {
 	}
 	return false
 }
+func TestParsePacket_SanitizesCallsigns(t *testing.T) {
+	addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42000}
+
+	tests := []struct {
+		name           string
+		data           []byte
+		expectedCS     string
+		expectedSource string
+		expectedDest   string
+	}{
+		{
+			name:       "Poll packet with suffix",
+			data:       []byte("YSFPN8ZA/CHUCK"),
+			expectedCS: "N8ZA",
+		},
+		{
+			name: "Data packet with suffixes",
+			data: func() []byte {
+				d := make([]byte, DataPacketSize)
+				copy(d[0:4], "YSFD")
+				copy(d[4:14], "KF8S-DAVE ")
+				copy(d[14:24], "N2QGV-FT5D")
+				copy(d[24:34], "M0FXB AND ")
+				return d
+			}(),
+			expectedCS:     "KF8S",
+			expectedSource: "N2QGV",
+			expectedDest:   "M0FXB",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			packet, err := ParsePacket(tt.data, addr)
+			if err != nil {
+				t.Fatalf("Failed to parse packet: %v", err)
+			}
+
+			if packet.Callsign != tt.expectedCS {
+				t.Errorf("Expected Callsign %q, got %q", tt.expectedCS, packet.Callsign)
+			}
+
+			if packet.Type == PacketTypeData {
+				if packet.SourceCS != tt.expectedSource {
+					t.Errorf("Expected SourceCS %q, got %q", tt.expectedSource, packet.SourceCS)
+				}
+				if packet.DestCS != tt.expectedDest {
+					t.Errorf("Expected DestCS %q, got %q", tt.expectedDest, packet.DestCS)
+				}
+			}
+		})
+	}
+}

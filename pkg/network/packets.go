@@ -85,7 +85,8 @@ func ParsePacket(data []byte, addr *net.UDPAddr) (*Packet, error) {
 	// Extract gateway/repeater callsign (bytes 4-14) if present
 	if len(data) >= 14 {
 		callsign := strings.TrimSpace(string(data[4:14]))
-		packet.Callsign = strings.TrimRight(callsign, "\x00")
+		callsign = strings.TrimRight(callsign, "\x00")
+		packet.Callsign = SanitizeCallsign(callsign)
 	}
 
 	// Extract source and destination callsigns for data packets
@@ -95,7 +96,7 @@ func ParsePacket(data []byte, addr *net.UDPAddr) (*Packet, error) {
 		sourceCS = strings.TrimRight(sourceCS, "\x00")
 		// Only set if not all spaces (which means no source callsign)
 		if sourceCS != "" && sourceCS != "          " {
-			packet.SourceCS = sourceCS
+			packet.SourceCS = SanitizeCallsign(sourceCS)
 		}
 
 		// Destination callsign (bytes 24-34)
@@ -103,7 +104,7 @@ func ParsePacket(data []byte, addr *net.UDPAddr) (*Packet, error) {
 		destCS = strings.TrimRight(destCS, "\x00")
 		// Only set if not all spaces (which means no destination callsign)
 		if destCS != "" && destCS != "          " {
-			packet.DestCS = destCS
+			packet.DestCS = SanitizeCallsign(destCS)
 		}
 	}
 
