@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/dbehnke/ysf-nexus/compare/v0.7.0...v0.8.0) (2025-12-22)
+
+
+### Features
+
+* migrate Dockerfile to use Taskfile ([6473a9b](https://github.com/dbehnke/ysf-nexus/commit/6473a9bb82d9d3da448816726b343fe7e76f47b3))
+
 ## [0.7.0](https://github.com/dbehnke/ysf-nexus/compare/v0.6.0...v0.7.0) (2025-12-22)
 
 
