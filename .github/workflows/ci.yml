@@ -8,7 +8,7 @@ on:
       run_integration:
         description: 'Run integration tests (tagged with "integration")'
         required: false
-        default: 'false'
+        default: "false"
 
 jobs:
   unit-tests:
@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.25'
+          go-version: "1.25"
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -35,8 +35,14 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run unit tests
-        run: go test ./... -v
+        run: task test
 
   integration-tests:
     name: Integration Tests
@@ -49,7 +55,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.25'
+          go-version: "1.25"
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -64,5 +70,11 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run integration tests (tagged integration)
-        run: go test ./... -v -tags=integration
+        run: task test-integration

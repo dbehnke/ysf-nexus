@@ -14,11 +14,16 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.25'
+          go-version: "1.25"
 
-      - name: Install dev tools and run linter via Makefile
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dev tools and run linter via Task
         run: |
-          # Use the project's Makefile to install and run dev tools. This
-          # centralizes tooling and keeps CI consistent with local dev.
-          make install-tools
-          make lint
+          # Use Task instead of the deprecated Makefile
+          task install-tools
+          task lint
