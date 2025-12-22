@@ -2,7 +2,10 @@
 FROM golang:1.25-alpine AS builder
 
 # Install dependencies
-RUN apk add --no-cache git make nodejs npm
+RUN apk add --no-cache git nodejs npm
+
+# Install task
+RUN go install github.com/go-task/task/v3/cmd/task@latest
 
 # Set working directory
 WORKDIR /app
@@ -17,7 +20,7 @@ RUN go mod download
 COPY . .
 
 # Build frontend first, then the application natively
-RUN make frontend && make build-native
+RUN task frontend && task build-native
 
 # Final stage
 FROM alpine:latest
