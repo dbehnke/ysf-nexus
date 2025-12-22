@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/dbehnke/ysf-nexus/compare/v0.6.0...v0.7.0) (2025-12-22)
+
+
+### Features
+
+* strip callsign suffixes from incoming packets ([#70](https://github.com/dbehnke/ysf-nexus/issues/70)) ([a5b53b2](https://github.com/dbehnke/ysf-nexus/commit/a5b53b23f63180a682c3bb9eb2d4dbb4196072e7))
+
 ## [0.6.0](https://github.com/dbehnke/ysf-nexus/compare/v0.5.0...v0.6.0) (2025-12-22)
 
 
