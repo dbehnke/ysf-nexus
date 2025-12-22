@@ -1,0 +1,201 @@
+version: "3"
+
+vars:
+  BINARY_NAME: ysf-nexus
+  VERSION:
+    sh: git describe --tags --always --dirty
+  BUILD_TIME:
+    sh: date +%FT%T%z
+  LDFLAGS: -ldflags "-X main.Version={{.VERSION}} -X main.BuildTime={{.BUILD_TIME}}"
+  GOPATH:
+    sh: go env GOPATH
+  GOBIN: '{{default (joinPath .GOPATH "bin") .GOBIN}}'
+
+tasks:
+  default:
+    desc: Build everything
+    cmds:
+      - task: clean
+      - task: lint
+      - task: test
+      - task: frontend
+      - task: build
+
+  build:
+    desc: Build the binary
+    cmds:
+      - go build {{.LDFLAGS}} -o bin/{{.BINARY_NAME}} ./cmd/ysf-nexus
+
+  frontend:
+    desc: Build the frontend
+    dir: frontend
+    cmds:
+      - npm install
+      - npm run build
+
+  build-linux:
+    desc: Build for Linux
+    env:
+      CGO_ENABLED: 0
+      GOOS: linux
+      GOARCH: amd64
+    cmds:
+      - go build {{.LDFLAGS}} -o bin/{{.BINARY_NAME}}-linux ./cmd/ysf-nexus
+
+  build-native:
+    desc: Build for native platform
+    env:
+      CGO_ENABLED: 0
+    cmds:
+      - go build {{.LDFLAGS}} -o bin/{{.BINARY_NAME}}-native ./cmd/ysf-nexus
+
+  build-windows:
+    desc: Build for Windows
+    env:
+      CGO_ENABLED: 0
+      GOOS: windows
+      GOARCH: amd64
+    cmds:
+      - go build {{.LDFLAGS}} -o bin/{{.BINARY_NAME}}-windows.exe ./cmd/ysf-nexus
+
+  build-darwin:
+    desc: Build for macOS
+    env:
+      CGO_ENABLED: 0
+      GOOS: darwin
+      GOARCH: amd64
+    cmds:
+      - go build {{.LDFLAGS}} -o bin/{{.BINARY_NAME}}-darwin ./cmd/ysf-nexus
+
+  build-all:
+    desc: Build for all platforms
+    cmds:
+      - task: build-linux
+      - task: build-windows
+      - task: build-darwin
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - go clean
+      - rm -rf bin/
+      - rm -rf coverage/
+      - rm -rf pkg/web/dist/*
+      - cmd: cd frontend && rm -rf node_modules/ dist/
+        ignore_error: true
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test -v ./...
+
+  test-coverage:
+    desc: Run tests with coverage
+    cmds:
+      - mkdir -p coverage
+      - go test -coverprofile=coverage/coverage.out ./...
+      - go tool cover -html=coverage/coverage.out -o coverage/coverage.html
+      - echo "Coverage report generated"
+
+  test-integration:
+    desc: Run integration tests
+    cmds:
+      - go test -v -tags=integration ./...
+
+  test-load:
+    desc: Run load tests
+    cmds:
+      - go test -v -tags=load ./...
+
+  test-bench:
+    desc: Run benchmarks
+    cmds:
+      - go test -bench=. -benchmem ./...
+
+  lint:
+    desc: Run linter
+    cmds:
+      - golangci-lint run ./... --timeout=5m
+
+  fmt:
+    desc: Format code
+    cmds:
+      - go fmt ./...
+
+  mod-tidy:
+    desc: Tidy go modules
+    cmds:
+      - go mod tidy
+
+  deps:
+    desc: Download dependencies
+    cmds:
+      - go mod download
+
+  docker:
+    desc: Build Docker image
+    cmds:
+      - docker build -t {{.BINARY_NAME}}:{{.VERSION}} .
+      - docker tag {{.BINARY_NAME}}:{{.VERSION}} {{.BINARY_NAME}}:latest
+
+  docker-run:
+    desc: Run Docker container
+    cmds:
+      - docker run -p 42000:42000/udp -p 8080:8080 {{.BINARY_NAME}}:latest
+
+  run:
+    desc: Build and run
+    deps: [build]
+    cmds:
+      - ./bin/{{.BINARY_NAME}}
+
+  dev:
+    desc: Run in development mode with hot reload
+    cmds:
+      - |
+        if command -v air >/dev/null 2>&1; then
+          air
+        else
+          echo "air not found, installing..."
+          go install github.com/air-verse/air@latest
+          air
+        fi
+
+  dev-frontend:
+    desc: Run frontend in development mode
+    dir: frontend
+    cmds:
+      - npm run dev
+
+  install-tools:
+    desc: Install development tools
+    vars:
+      GOLANGCI_LINT_VERSION: v1.63.4
+      AIR_VERSION: v1.63.0
+      GOVULNCHECK_VERSION: v1.1.4
+      GORELEASER_VERSION: v2.5.1
+    cmds:
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}}
+      - go install github.com/air-verse/air@{{.AIR_VERSION}}
+      - go install golang.org/x/vuln/cmd/govulncheck@{{.GOVULNCHECK_VERSION}}
+      - go install github.com/goreleaser/goreleaser/v2@{{.GORELEASER_VERSION}}
+
+  audit-rules:
+    desc: Audit project rules compliance
+    cmds:
+      - echo "Checking compliance with modular rules..."
+      - ls -la .agent/rules/
+      - test -f .agent/rules/00-core-workflow.md || (echo "Missing core-workflow rule"; exit 1)
+      - test -f .agent/rules/00-tdd.md || (echo "Missing TDD rule"; exit 1)
+      - test -f .agent/rules/10-github-task.md || (echo "Missing GitHub task rule"; exit 1)
+      - test -f .agent/rules/20-backend-go.md || (echo "Missing Go backend rule"; exit 1)
+      - echo "Rules audit passed."
+  release-check:
+    desc: Validate GoReleaser configuration
+    cmds:
+      - "{{.GOBIN}}/goreleaser check"
+
+  release-snapshot:
+    desc: Perform a local dry-run release (snapshot)
+    cmds:
+      - "{{.GOBIN}}/goreleaser release --snapshot --clean"
