@@ -25,7 +25,7 @@ builds:
       - -s -w -X main.Version={{.Version}} -X main.BuildTime={{.Date}}
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     # this name template makes the arm64 binaries look more standard
     name_template: >-
       {{ .ProjectName }}_
@@ -37,7 +37,7 @@ archives:
     # use zip for windows archives
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
 
 checksum:
   name_template: "checksums.txt"
