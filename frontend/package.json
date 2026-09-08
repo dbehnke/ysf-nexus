@@ -21,7 +21,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/eslint-config-prettier": "^10.2.0",
-    "autoprefixer": "^10.5.4",
+    "autoprefixer": "^10.5.5",
     "eslint": "^9.39.2",
     "eslint-plugin-vue": "^10.10.0",
     "postcss": "^8.5.28",
